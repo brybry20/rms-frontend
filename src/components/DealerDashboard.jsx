@@ -7,7 +7,7 @@ import Navbar from './Navbar';
 import DealerNewRMA from './DealerNewRMA';
 import './DealerDashboard.css';
 
-const API = 'http://localhost:5000/api/dealer';
+const API = `${import.meta.env.VITE_API_URL}/api/admin`;
 const STATUS_TEXT = { pending_dealer: 'Pending', pending_authorizer: 'Pending', pending_approver: 'Pending', authorized: 'Authorized', approved: 'Approved', rejected: 'Rejected' };
 const STATUS_OPTS = [
   { v: 'all', l: 'All Status' }, { v: 'pending', l: 'Pending' }, { v: 'authorized', l: 'Authorized' },

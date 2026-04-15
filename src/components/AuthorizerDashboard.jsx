@@ -7,6 +7,9 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import logoSrc from '../assets/logo2.png';
 
+// ─── API Base URL ────────────────────────────────────────────────────────────
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 const AUTH_BY_OPTS = ['Belle Tolentino','Chie Rogacion','Arvin Diocena','Mario Vargas','Kiko Magallanes'];
 const COMPANY = {
@@ -159,11 +162,11 @@ const MediaViewer = ({ items, startIndex, onClose }) => {
         </div>
         {items.length>1 && (
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 0'}}>
-            <button onClick={()=>setIdx(i=>i-1)} disabled={idx===0} style={{background:'rgba(255,255,255,.1)',border:'none',color:'white',padding:'8px 18px',borderRadius:6,cursor:'pointer',opacity:idx===0?.3:1}}>← Prev</button>
+            <button onClick={()=>setIdx(i=>i-1)} disabled={idx===0} style={{background:'rgba(255,255,255,.1)',border:'none',color:'white',padding:'8px 18px',borderRadius:6,cursor:'pointer',opacity:idx===0?0.5:1}}>← Prev</button>
             <div style={{display:'flex',gap:6}}>
               {items.map((_,i)=><span key={i} onClick={()=>setIdx(i)} style={{width:8,height:8,borderRadius:'50%',background:i===idx?'#2563eb':'rgba(255,255,255,.3)',cursor:'pointer',display:'inline-block'}}/>)}
             </div>
-            <button onClick={()=>setIdx(i=>i+1)} disabled={idx===items.length-1} style={{background:'rgba(255,255,255,.1)',border:'none',color:'white',padding:'8px 18px',borderRadius:6,cursor:'pointer',opacity:idx===items.length-1?.3:1}}>Next →</button>
+            <button onClick={()=>setIdx(i=>i+1)} disabled={idx===items.length-1} style={{background:'rgba(255,255,255,.1)',border:'none',color:'white',padding:'8px 18px',borderRadius:6,cursor:'pointer',opacity:idx===items.length-1?0.5:1}}>Next →</button>
           </div>
         )}
       </div>
@@ -235,7 +238,7 @@ export default function AuthorizerDashboard({ user, onLogout }) {
 
   const fetchPending = async () => {
     try {
-      const res = await axios.get('http://localhost:5000/api/authorizer/pending');
+      const res = await axios.get(`${API_BASE_URL}/api/authorizer/pending`);
       const parsed = (res.data.rmas||[]).map(r=>({...r,attachments:parseAtts(r.attachments)}));
       const prev = prevPendingRef.current;
       const prevIds = prev.map(r=>r.id);
@@ -243,14 +246,15 @@ export default function AuthorizerDashboard({ user, onLogout }) {
       const changed = prev.length>0 ? parsed.filter(r=>{ const o=prev.find(x=>x.id===r.id); return o&&o.status!==r.status; }) : [];
       const updateCount = newIds.length + changed.length;
       if(updateCount>0){ setUpdateBanner({count:updateCount,isNew:newIds.length>0}); setTimeout(()=>setUpdateBanner(null),5000); }
+      setPendingRmas(parsed);
       prevPendingRef.current = parsed;
-      setPendingRmas(parsed); setLastFetch(Date.now());
+      setLastFetch(Date.now());
     } catch(e){ console.error(e); }
   };
 
   const fetchHistory = async () => {
     try {
-      const res = await axios.get('http://localhost:5000/api/authorizer/history');
+      const res = await axios.get(`${API_BASE_URL}/api/authorizer/history`);
       setHistoryRmas((res.data.rmas||[]).map(r=>({...r,attachments:parseAtts(r.attachments),authorizer_attachments:parseAtts(r.authorizer_attachments)})));
     } catch(e){ console.error(e); } finally { setLoading(false); }
   };
@@ -276,12 +280,18 @@ export default function AuthorizerDashboard({ user, onLogout }) {
     Object.entries(authData).forEach(([k,v])=>fd.append(k,v));
     fd.append('attachment_names',JSON.stringify(authAtts.map(f=>f.name)));
     authAtts.forEach(f=>fd.append('authorizer_attachments',f));
-    try { await axios.put(`http://localhost:5000/api/authorizer/authorize/${pendingId}`,fd,{headers:{'Content-Type':'multipart/form-data'}}); showToast('RMA authorized successfully.','success'); setShowConfirm(false); closeModal(); fetchPending(); fetchHistory(); }
-    catch(e){ alert(e.response?.data?.error||'Failed'); } finally { setUploading(false); }
+    try { 
+      await axios.put(`${API_BASE_URL}/api/authorizer/authorize/${pendingId}`,fd,{headers:{'Content-Type':'multipart/form-data'}}); 
+      showToast('RMA authorized successfully.','success'); 
+      setShowConfirm(false); 
+      closeModal(); 
+      fetchPending(); 
+      fetchHistory(); 
+    } catch(e){ alert(e.response?.data?.error||'Failed'); } finally { setUploading(false); }
   };
 
-  const handleReject = async id => { const c=prompt('Enter rejection reason:'); if(!c) return; try { await axios.put(`http://localhost:5000/api/authorizer/reject/${id}`,{authorized_by:user.id,authorizer_comments:c}); showToast('RMA rejected.','info'); closeModal(); fetchPending(); } catch(e){ alert(e.response?.data?.error||'Failed'); } };
-  const handleBackToDealer = async id => { const c=prompt('Enter comments for dealer:'); if(!c) return; try { await axios.put(`http://localhost:5000/api/authorizer/back-to-dealer/${id}`,{authorized_by:user.id,authorizer_comments:c}); showToast('RMA returned to dealer.','info'); closeModal(); fetchPending(); } catch(e){ alert(e.response?.data?.error||'Failed'); } };
+  const handleReject = async id => { const c=prompt('Enter rejection reason:'); if(!c) return; try { await axios.put(`${API_BASE_URL}/api/authorizer/reject/${id}`,{authorized_by:user.id,authorizer_comments:c}); showToast('RMA rejected.','info'); closeModal(); fetchPending(); } catch(e){ alert(e.response?.data?.error||'Failed'); } };
+  const handleBackToDealer = async id => { const c=prompt('Enter comments for dealer:'); if(!c) return; try { await axios.put(`${API_BASE_URL}/api/authorizer/back-to-dealer/${id}`,{authorized_by:user.id,authorizer_comments:c}); showToast('RMA returned to dealer.','info'); closeModal(); fetchPending(); } catch(e){ alert(e.response?.data?.error||'Failed'); } };
 
   const handleUpdateAuthorized = async () => {
     if(!editData.authorized_by||!editData.return_date||!editData.return_received_by){ alert('All required fields must be filled'); return; }
@@ -290,8 +300,13 @@ export default function AuthorizerDashboard({ user, onLogout }) {
     Object.entries(editData).forEach(([k,v])=>fd.append(k,v));
     fd.append('attachment_names',JSON.stringify(editAtts.map(f=>f.name)));
     editAtts.forEach(f=>fd.append('authorizer_attachments',f));
-    try { await axios.put(`http://localhost:5000/api/authorizer/update_authorized/${selectedRMA.id}`,fd,{headers:{'Content-Type':'multipart/form-data'}}); showToast('Authorization updated.','success'); setSelectedRMA(null); setEditMode(false); fetchHistory(); }
-    catch(e){ alert(e.response?.data?.error||'Update failed'); } finally { setUploading(false); }
+    try { 
+      await axios.put(`${API_BASE_URL}/api/authorizer/update_authorized/${selectedRMA.id}`,fd,{headers:{'Content-Type':'multipart/form-data'}}); 
+      showToast('Authorization updated.','success'); 
+      setSelectedRMA(null); 
+      setEditMode(false); 
+      fetchHistory(); 
+    } catch(e){ alert(e.response?.data?.error||'Update failed'); } finally { setUploading(false); }
   };
 
   // ─── JSX ───────────────────────────────────────────────────────────────────
@@ -382,7 +397,8 @@ export default function AuthorizerDashboard({ user, onLogout }) {
                     </div></td>
                   </tr>
                 ))}</tbody>
-              </table></div>
+              </table>
+            </div>
             )}
           </div>
         )}

@@ -8,7 +8,7 @@ import jsPDF from 'jspdf';
 import logoSrc from '../assets/logo2.png';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const API = 'http://localhost:5000/api/admin';
+const API = `${import.meta.env.VITE_API_URL}/api/admin`;
 const TT = { contentStyle: { borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13px' } };
 const STATUS_COLORS = { pending_dealer:'#f59e0b', pending_authorizer:'#f97316', pending_approver:'#8b5cf6', authorized:'#10b981', approved:'#06b6d4', rejected:'#ef4444' };
 const PIE_COLORS = ['#1e3a5f','#2563eb','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899'];

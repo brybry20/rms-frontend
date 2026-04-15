@@ -117,7 +117,8 @@ export default function Register({ onSwitch }) {
       const { confirmPassword, region_code, province_code, city_code, barangay_code, ...data } = formData;
       data.company_name = data.distributor_name;
       delete data.distributor_name;
-      const res = await axios.post('http://localhost:5000/api/register', data);
+      const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const res = await axios.post(`${API_BASE_URL}/api/register`, data);
       showToast(res.data.message, 'success');
       setTimeout(() => onSwitch(), 2200);
     } catch (err) {

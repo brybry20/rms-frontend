@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import './DealerMyRMAs.css';
 
-const API          = 'http://localhost:5000/api/dealer/rma';
+const API = `${import.meta.env.VITE_API_URL}/api/admin`;
 const STATUS_TEXT  = { pending_dealer:'Pending (Need Edit)', pending_authorizer:'Pending Auth', pending_approver:'Pending Approval', authorized:'Authorized', approved:'Approved', rejected:'Rejected' };
 const STATUS_OPTS  = [
   {v:'all',l:'All Status'},{v:'pending_dealer',l:'Pending (Need Edit)'},{v:'pending_authorizer',l:'Pending Auth'},

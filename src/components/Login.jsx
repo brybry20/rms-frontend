@@ -3,6 +3,8 @@ import axios from 'axios';
 import logo from '../assets/logo2.png';
 import './Login.css';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 export default function Login({ onLogin, onSwitch }) {
   const [username,     setUsername]     = useState('');
   const [password,     setPassword]     = useState('');
@@ -15,7 +17,8 @@ export default function Login({ onLogin, onSwitch }) {
     setLoading(true);
     setMessage('');
     try {
-      const res = await axios.post('http://localhost:5000/api/login', { username, password });
+        const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+        const res = await axios.post(`${API_BASE_URL}/api/login`, { username, password });
       onLogin(res.data.user);
     } catch (err) {
       setMessage(err.response?.data?.error || 'Login failed. Please try again.');

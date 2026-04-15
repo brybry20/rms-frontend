@@ -17,8 +17,7 @@ export default function Login({ onLogin, onSwitch }) {
     setLoading(true);
     setMessage('');
     try {
-        const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-        const res = await axios.post(`${API_BASE_URL}/api/login`, { username, password });
+      const res = await axios.post(`${API_BASE_URL}/api/login`, { username, password });
       onLogin(res.data.user);
     } catch (err) {
       setMessage(err.response?.data?.error || 'Login failed. Please try again.');
@@ -29,7 +28,7 @@ export default function Login({ onLogin, onSwitch }) {
 
   return (
     <div className="auth-root">
-      {/* ── Left Panel ── */}
+      {/* Left Panel */}
       <div className="auth-panel-left">
         <div className="auth-panel-deco" />
 
@@ -55,7 +54,7 @@ export default function Login({ onLogin, onSwitch }) {
         <div className="auth-panel-strip" />
       </div>
 
-      {/* ── Right Panel ── */}
+      {/* Right Panel */}
       <div className="auth-panel-right">
         <div className="auth-form-wrap">
           <div className="auth-header">
@@ -112,4 +111,4 @@ export default function Login({ onLogin, onSwitch }) {
       </div>
     </div>
   );
-} 
+}

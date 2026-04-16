@@ -1,10 +1,264 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
 import locationData from '../data/philippine_locations.json';
 import logo from '../assets/logo2.png';
 import './Register.css';
+import api from '../api';
 
-// ✅ Defined OUTSIDE parent — prevents remount / focus loss on every keystroke
+// Listahan ng mga distributors
+const DISTRIBUTORS_LIST = [
+  "2RM WORTHY INDUSTRIAL SUPPLIES",
+  "3G1B ENTERPRISE",
+  "3J GOLDEN DRAGON CORP",
+  "5MLINK ENTERPRISE",
+  "A. ALVAREZ TRADING & SERVICES",
+  "AFFF GENERAL MERCHANDISE",
+  "AGP TRADING",
+  "AIC INDUSTRIAL AND SAFETY",
+  "AJDA ENTERPRISES INC.",
+  "AJDA INDUSTRIAL SUPPLY",
+  "AKJ27 CONSTRUCTION SUPPLY AND",
+  "ALPHA SOLUTIO ENTERPRISE",
+  "AMCAS ENTERPRISES",
+  "AMMCO INTERNATIONAL CONSUMER",
+  "ANDUILLER INT'L. SALES CORP",
+  "AQUARIAN MARINE SUPPLY INC.",
+  "ARC-CARE ENTERPRISES",
+  "ARUGA INTEGRATED SOLUTION OPC",
+  "ASJZ TRADING",
+  "BC-MAN ENTERPRISES INC.",
+  "BEMX ENTERPRISES",
+  "BESTMARC UNISALES INC.",
+  "BIGVISION INTERNATIONAL TRADE",
+  "BLUEPOWER VENTURES INC.",
+  "BOHOL QUALITY CORPORATION",
+  "BUENDEZ INDUSTRIAL",
+  "BUILDSAFE MARKETING VENTURES",
+  "C-CHOICE CONSTRUCTION SUPPLY",
+  "CEBU ATLANTIC HARDWARE INC.",
+  "CEBU BELMONT, INC",
+  "CLEANGUARD JANITORIAL &",
+  "COMFORT SEARCH ENTERPRISES",
+  "COMPLIMENTS MEN'S BOUTIQUE",
+  "CONREY IAN VALLEJOS",
+  "CORAND SUPPORT MARKETING INC",
+  "CS TRADING & GENERAL",
+  "DC INDUSTRIAL & OFFICE",
+  "DCM GLOBAL TECHNOLOGIES INC.",
+  "DELS APPAREL CORPORATION",
+  "DELS CORPORATION",
+  "DELTA PLUS PHILIPPINES",
+  "DENKI ELECTRIC CORPORATION",
+  "DML SUBIC FREEPORT CORPORATION",
+  "EHS BIOPRODUCTS INC",
+  "ELITECLEAN INC",
+  "ENBK PRINTING SERVICES",
+  "FIL AMERICAN HARDWARE",
+  "FIRST CHOICE INDUSTRIAL SAFETY",
+  "FIRST POWER ELECTRICAL",
+  "FOOTSAFE PHILIPPINES, INC.",
+  "FORD GARMENTS AND SAFETY GEARS",
+  "FOREMOST SCREWTECH BOLTS",
+  "FRANCIS ECHAGUE",
+  "FRANCIS MAGALLANES",
+  "FRONTGUILD INC.",
+  "GDA SEMICON TRADING",
+  "GEN ASIA TRADING",
+  "GENASCO MARKETING CORPORATION",
+  "GLJM DIVERSIFIED",
+  "GLOTOC TOOLS AND INDUSTRIAL",
+  "GMAP ENTERPRISE",
+  "GOSHIELD PROTECTIVE EQUIPMENT",
+  "GOSON MARKETING INC.",
+  "GRATEFUL MIND ENTERPRISE",
+  "GREMCA-V INTERNATIONAL",
+  "HANANI CONSUMER GOODS TRADING",
+  "HONEY-WELL INTERNATIONAL SALES",
+  "INTEGRATED SCIENTIFIC AND",
+  "J. RANIDO ENTERPRISES",
+  "JCC3 TRADING CORPORATION",
+  "JEZHAN ENTERPRISES",
+  "JV SAFETY AND PERSONAL",
+  "KAZ TRADING",
+  "KEY LINK SALES INTEGRATED INC.",
+  "KING'S SAFETYNET INC.",
+  "KJELD ENTERPRISE INC.",
+  "KOI INDUSTRIAL SUPPLY",
+  "KRISAN SAFETY AND INDUSTRIAL",
+  "LATEX ENTERPRISES",
+  "LEX CARRETAS",
+  "LJM INDUSTRIAL SAFETY PRODUCTS",
+  "LOCSEAL INDUSTRIAL CORPORATION",
+  "LONGHAPROS MARKETING",
+  "LSG INDUSTRIAL & OFFICE",
+  "LTS HARDWARE, INC",
+  "LUCKY 14 ENTERPRISE",
+  "MAJIN INDUSTRIAL",
+  "MANWORXXX MARKETING AND",
+  "MARIEL GERES",
+  "MARIO VARGAS",
+  "MARKETING EVENT",
+  "MASE PERSONAL PROTECTIVE",
+  "MASIGASIG DISTRIBUTION",
+  "MBN ENTERPRISE",
+  "MC ARC INDUSTRIAL SUPPLY",
+  "MERCHANTO ENTERPRISES CORP.",
+  "MERF ISES OPC",
+  "MICEL CORPORATION",
+  "MILERK CONSUMER GOODS TRADING",
+  "MOIKAI INCORPORATED",
+  "MOIKAI INDUSTRIAL SUPPLIES AND",
+  "MUSH ENTERPRISES",
+  "NEMIKA ENTERPRISES",
+  "NI-GATSU SAISEI CORPORATION",
+  "NORDEN SUBIC ENTREPRENEURS INC",
+  "NUPON TECHNOLOGY PHILIPPINES",
+  "OLIVEROS PROTECTIVE EQUIPMENT",
+  "OPTICHEM INDUSTRIES CHEMICAL",
+  "ORIGIN8 BUILDERS & TRADING INC",
+  "ORO FORMMS TRADING",
+  "PEPSAN ENTERPRISES",
+  "PHILSTAFF MANAGEMENT SERVICES,",
+  "PPI ASIA LINKS CORP",
+  "PRECISTO INDUSTRIAL TRADING",
+  "PROFESSIONAL GEAR, INC.",
+  "QUICSAFE GENERAL MERCHANDISE",
+  "R.B. CASTILLO ENTERPRISES",
+  "RAPIDSAFE PHILIPPINES INC.",
+  "RCORDS INDUSTRIAL SUPPLIES AND",
+  "RECON TRADING",
+  "REIDAR ENTERPRISES",
+  "REIDAR ENTERPRISES CO.",
+  "REJOICE HARDWARE AND",
+  "RICKMARK INDUSTRIAL SALES",
+  "ROBART CONSTRUCTION SUPPLIES",
+  "ROCKWELL ENTERPRISE INC",
+  "ROLD MASILUNGAN",
+  "ROMAN ESSENCE INTERNATIONAL",
+  "ROMPRO INDUSTRIAL SUPPLY",
+  "ROYAL HYGIENE AND SAFETY",
+  "SAFETY4LESS INDUSTRIAL CORP.",
+  "SAFETYKO INDUSTRIAL SUPPLIES",
+  "SAFETYPRO INCORPORATED",
+  "SAFEVIEW ENTERPRISES",
+  "SEE MORE ENTERPRISE CO",
+  "SGA TRADING",
+  "SHOPBCD TRADING",
+  "SMV ENTERPRISES",
+  "SOUTHCOAST MARKETING",
+  "ST. CLAIRE GARMENTS AND",
+  "SUNCARE TRADING",
+  "SUNTREK ENTERPRISES",
+  "TAKEZO INDUSTRIAL SUPPLY",
+  "TARGET SAFETY PERSONAL",
+  "TOP LIFEGEAR MARKETING",
+  "TRACMAC MARKETING",
+  "TRI MAGNUM INC",
+  "TRIBOHSE INDUSTRIAL TRADING",
+  "TRI-JAGUAR SAFETY &",
+  "TRIPLE A UNIVERSAL SAFETY",
+  "TRIPLE K ENTERPRISES",
+  "TRUEWORKS HARDWARE CORPORATION",
+  "UNI-REAL TRADING CORPORATION",
+  "UPRIGHT INDUSTRIAL CHEMICALS",
+  "UPSAFE INDUSTRIAL COMPANY INC",
+  "U-SAFE SAFETY SPECIALIST CORP.",
+  "UYMATIAO TRADING CORPORATION",
+  "VERDE MART",
+  "VERIDIAN ENTERPRISES",
+  "WASHINGTON ENTERPRISES INC.",
+  "WELD POWERTOOLS INDUSTRIAL",
+  "WORLD SAFETY SUPPLY CENTER INC",
+  "YANG CHI TRADING",
+  "ZENITH TECHNOLOGY INC.",
+  "ZENTECH TRADING",
+  "ZERO HAZARD TRADING"
+].sort((a, b) => a.localeCompare(b));
+
+// Component para sa distributor dropdown na may search
+const DistributorInput = ({ value, onChange, onBlur }) => {
+  const [searchTerm, setSearchTerm] = useState(value || '');
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [filteredDistributors, setFilteredDistributors] = useState([]);
+
+  useEffect(() => {
+    if (searchTerm.length > 0) {
+      const filtered = DISTRIBUTORS_LIST.filter(d => 
+        d.toLowerCase().includes(searchTerm.toLowerCase())
+      ).slice(0, 15);
+      setFilteredDistributors(filtered);
+      setShowDropdown(true);
+    } else {
+      setFilteredDistributors(DISTRIBUTORS_LIST.slice(0, 15));
+      setShowDropdown(true);
+    }
+  }, [searchTerm]);
+
+  const handleSelect = (distributor) => {
+    setSearchTerm(distributor);
+    onChange({ target: { name: 'distributor_name', value: distributor } });
+    setShowDropdown(false);
+  };
+
+  const handleInputChange = (e) => {
+    setSearchTerm(e.target.value);
+    onChange(e);
+  };
+
+  const handleBlur = () => {
+    setTimeout(() => setShowDropdown(false), 200);
+    if (onBlur) onBlur();
+  };
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <input
+        type="text"
+        name="distributor_name"
+        value={searchTerm}
+        onChange={handleInputChange}
+        onFocus={() => setShowDropdown(true)}
+        onBlur={handleBlur}
+        placeholder="Type or select distributor..."
+        autoComplete="off"
+        required
+      />
+      {showDropdown && filteredDistributors.length > 0 && (
+        <div style={{
+          position: 'absolute',
+          top: '100%',
+          left: 0,
+          right: 0,
+          maxHeight: '200px',
+          overflowY: 'auto',
+          backgroundColor: 'white',
+          border: '1px solid #ccc',
+          borderRadius: '4px',
+          zIndex: 1000,
+          boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
+        }}>
+          {filteredDistributors.map((d, i) => (
+            <div
+              key={i}
+              onClick={() => handleSelect(d)}
+              style={{
+                padding: '8px 12px',
+                cursor: 'pointer',
+                borderBottom: '1px solid #eee',
+                fontSize: '13px'
+              }}
+              onMouseEnter={(e) => e.target.style.backgroundColor = '#f0f0f0'}
+              onMouseLeave={(e) => e.target.style.backgroundColor = 'white'}
+            >
+              {d}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Field component
 const Field = ({ label, required, hint, children }) => (
   <div className="auth-field">
     <label>
@@ -117,8 +371,7 @@ export default function Register({ onSwitch }) {
       const { confirmPassword, region_code, province_code, city_code, barangay_code, ...data } = formData;
       data.company_name = data.distributor_name;
       delete data.distributor_name;
-      const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-      const res = await axios.post(`${API_BASE_URL}/api/register`, data);
+      const res = await api.post('/api/register', data);
       showToast(res.data.message, 'success');
       setTimeout(() => onSwitch(), 2200);
     } catch (err) {
@@ -157,7 +410,7 @@ export default function Register({ onSwitch }) {
 
         <form onSubmit={handleSubmit} className="auth-form">
 
-          {/* ── Account Info ── */}
+          {/* Account Info */}
           <div className="form-section-title">Account Information</div>
 
           <Field label="Username" required>
@@ -202,14 +455,17 @@ export default function Register({ onSwitch }) {
             </Field>
           </div>
 
-          {/* ── Distributor ── */}
+          {/* Distributor Information with DROPDOWN */}
           <div className="form-section-title">Distributor Information</div>
 
           <Field label="Distributor / Company Name" required>
-            <input type="text" name="distributor_name" value={formData.distributor_name} onChange={handleChange} placeholder="Official company or distributor name" />
+            <DistributorInput 
+              value={formData.distributor_name}
+              onChange={handleChange}
+            />
           </Field>
 
-          {/* ── Location ── */}
+          {/* Location */}
           <div className="form-section-title">Location</div>
 
           <div className="auth-field-row">

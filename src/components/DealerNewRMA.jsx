@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
 import locationData from '../data/philippine_locations.json';
 import './DealerNewRMA.css';
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+import api from '../api';
+
 const RETURN_TYPES = ['Return Only','Return for Credit','Return for Exchange'];
 const REASONS = {
   'Return Only': ['Recall - DPP Initiated Returns'],
@@ -249,8 +249,7 @@ function DealerNewRMA({ dealerId, onSuccess, dealerProfile }) {
     attachments.forEach(f => fd.append('attachments', f));
     
     try {
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-const res = await axios.post(`${API_BASE_URL}/api/dealer/rma/create`, fd, {
+        const res = await api.post('/api/dealer/rma/create', fd, {
             headers: { 'Content-Type': 'multipart/form-data' }
         });
         showToast(res.data.message, 'success');
@@ -260,7 +259,7 @@ const res = await axios.post(`${API_BASE_URL}/api/dealer/rma/create`, fd, {
     } finally {
         setLoading(false);
     }
-};
+  };
 
   // Preview renderer for different file types
   const renderPreview = (p, i) => {

@@ -1,17 +1,88 @@
 import { useState, useEffect, useRef } from 'react';
-import axios from 'axios';
 import './DealerMyRMAs.css';
+import api from '../api';
 
-const API = `${import.meta.env.VITE_API_URL}/api/admin`;
-const STATUS_TEXT  = { pending_dealer:'Pending (Need Edit)', pending_authorizer:'Pending Auth', pending_approver:'Pending Approval', authorized:'Authorized', approved:'Approved', rejected:'Rejected' };
-const STATUS_OPTS  = [
+const API = '/api/dealer/rma';
+const STATUS_TEXT = { pending_dealer:'Pending (Need Edit)', pending_authorizer:'Pending Auth', pending_approver:'Pending Approval', authorized:'Authorized', approved:'Approved', rejected:'Rejected' };
+const STATUS_OPTS = [
   {v:'all',l:'All Status'},{v:'pending_dealer',l:'Pending (Need Edit)'},{v:'pending_authorizer',l:'Pending Auth'},
   {v:'pending_approver',l:'Pending Approval'},{v:'authorized',l:'Authorized'},{v:'approved',l:'Approved'},{v:'rejected',l:'Rejected'}
 ];
 
+// ✅ GET FILE ICON based on resource type
+const getFileIcon = (resourceType, url) => {
+  if (resourceType === 'image') return '🖼️';
+  if (resourceType === 'video') return '🎥';
+  if (resourceType === 'raw') {
+    if (url?.includes('.pdf')) return '📄';
+    if (url?.includes('.doc') || url?.includes('.docx')) return '📝';
+    if (url?.includes('.xls')) return '📊';
+    return '📎';
+  }
+  return '📎';
+};
+
+// ✅ Helper para makuha ang filename mula sa URL
+const getFileNameFromUrl = (url) => {
+  if (!url) return 'File';
+  const parts = url.split('/');
+  let fileName = parts[parts.length - 1];
+  fileName = fileName.replace(/^v\d+_/, '');
+  return fileName.substring(0, 25);
+};
+
+// ✅ DOWNLOAD function na may original filename
+const handleDownload = (url, originalFilename) => {
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = originalFilename || 'download';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+
 const parseAtts    = a => !a?[]:Array.isArray(a)?a:(typeof a==='string'?(JSON.parse(a)||[]):[]);
 const getStatusTxt = s => STATUS_TEXT[s]||s;
 const StatusBadge  = ({s}) => <span className={`dmr-badge dmr-badge-${s}`}>{getStatusTxt(s)}</span>;
+
+// ✅ Attachment Block with proper file handling
+const AttachmentBlock = ({atts,label,cls}) => {
+  if (!atts?.length) return null;
+  return (
+    <div className="dmr-attach-block">
+      <div className={`dmr-attach-label ${cls}`}>{label}</div>
+      <div className="dmr-attach-grid">
+        {atts.map((att, idx) => {
+          const isImage = att.resource_type === 'image';
+          const isVideo = att.resource_type === 'video';
+          const fileName = att.original_filename || att.filename || getFileNameFromUrl(att.url);
+          
+          if (isImage) {
+            return (
+              <a key={idx} href={att.url} target="_blank" rel="noopener noreferrer">
+                <img src={att.url} alt="" className="dmr-att-img" />
+              </a>
+            );
+          } else if (isVideo) {
+            return (
+              <a key={idx} href={att.url} target="_blank" rel="noopener noreferrer">
+                <video src={att.url} controls className="dmr-att-video" />
+              </a>
+            );
+          } else {
+            return (
+              <div key={idx} className="attachment-file-card" onClick={() => handleDownload(att.url, fileName)}>
+                <div className="attachment-file-icon">{getFileIcon(att.resource_type, att.url)}</div>
+                <div className="attachment-file-name">{fileName}</div>
+                <div className="attachment-file-download">⬇ Download</div>
+              </div>
+            );
+          }
+        })}
+      </div>
+    </div>
+  );
+};
 
 function DealerMyRMAs({ dealerId, updatedIds=[], onMarkRead }) {
   const [rmas,         setRmas]         = useState([]);
@@ -31,7 +102,7 @@ function DealerMyRMAs({ dealerId, updatedIds=[], onMarkRead }) {
 
   const fetchRMAs = async () => {
     try {
-      const res = await axios.get(`${API}/my-requests/${dealerId}`);
+      const res = await api.get(`${API}/my-requests/${dealerId}`);
       setRmas((res.data.rmas||[]).map(r=>({...r, attachments:parseAtts(r.attachments), authorizer_attachments:parseAtts(r.authorizer_attachments), approver_attachments:parseAtts(r.approver_attachments)})));
     } catch(e){ console.error(e); }
     finally{ setLoading(false); }
@@ -52,7 +123,7 @@ function DealerMyRMAs({ dealerId, updatedIds=[], onMarkRead }) {
     if (!window.confirm('Cancel this RMA request? This cannot be undone.')) return;
     setCancellingId(id);
     try {
-      await axios.delete(`${API}/delete/${id}/${dealerId}`);
+      await api.delete(`${API}/delete/${id}/${dealerId}`);
       showToast('RMA cancelled successfully.','success');
       fetchRMAs();
     } catch(e){ showToast(e.response?.data?.error||'Failed to cancel','error'); }
@@ -60,19 +131,6 @@ function DealerMyRMAs({ dealerId, updatedIds=[], onMarkRead }) {
   };
 
   const isUpdated = id => updatedIds.includes(id);
-
-  const AttachmentBlock = ({atts,label,cls}) => !atts?.length ? null : (
-    <div className="dmr-attach-block">
-      <div className={`dmr-attach-label ${cls}`}>{label}</div>
-      <div className="dmr-attach-grid">
-        {atts.map((a,i)=>(
-          <a key={i} href={a.url} target="_blank" rel="noopener noreferrer">
-            {a.resource_type==='image'?<img src={a.url} alt="" className="dmr-att-img"/>:<video src={a.url} controls className="dmr-att-video"/>}
-          </a>
-        ))}
-      </div>
-    </div>
-  );
 
   return (
     <div className="dmr-root">

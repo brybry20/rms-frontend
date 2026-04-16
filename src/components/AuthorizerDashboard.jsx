@@ -1,14 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import axios from 'axios';
+import jsPDF from 'jspdf';
+import * as XLSX from 'xlsx';
 import Navbar from './Navbar';
 import './AuthorizerDashboard.css';
-import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import logoSrc from '../assets/logo2.png';
-
-// ─── API Base URL ────────────────────────────────────────────────────────────
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+import api from '../api';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const AUTH_BY_OPTS = ['Belle Tolentino','Chie Rogacion','Arvin Diocena','Mario Vargas','Kiko Magallanes'];
@@ -238,7 +235,7 @@ export default function AuthorizerDashboard({ user, onLogout }) {
 
   const fetchPending = async () => {
     try {
-      const res = await axios.get(`${API_BASE_URL}/api/authorizer/pending`);
+      const res = await api.get('/api/authorizer/pending');
       const parsed = (res.data.rmas||[]).map(r=>({...r,attachments:parseAtts(r.attachments)}));
       const prev = prevPendingRef.current;
       const prevIds = prev.map(r=>r.id);
@@ -246,15 +243,14 @@ export default function AuthorizerDashboard({ user, onLogout }) {
       const changed = prev.length>0 ? parsed.filter(r=>{ const o=prev.find(x=>x.id===r.id); return o&&o.status!==r.status; }) : [];
       const updateCount = newIds.length + changed.length;
       if(updateCount>0){ setUpdateBanner({count:updateCount,isNew:newIds.length>0}); setTimeout(()=>setUpdateBanner(null),5000); }
-      setPendingRmas(parsed);
       prevPendingRef.current = parsed;
-      setLastFetch(Date.now());
+      setPendingRmas(parsed); setLastFetch(Date.now());
     } catch(e){ console.error(e); }
   };
 
   const fetchHistory = async () => {
     try {
-      const res = await axios.get(`${API_BASE_URL}/api/authorizer/history`);
+      const res = await api.get('/api/authorizer/history');
       setHistoryRmas((res.data.rmas||[]).map(r=>({...r,attachments:parseAtts(r.attachments),authorizer_attachments:parseAtts(r.authorizer_attachments)})));
     } catch(e){ console.error(e); } finally { setLoading(false); }
   };
@@ -280,18 +276,12 @@ export default function AuthorizerDashboard({ user, onLogout }) {
     Object.entries(authData).forEach(([k,v])=>fd.append(k,v));
     fd.append('attachment_names',JSON.stringify(authAtts.map(f=>f.name)));
     authAtts.forEach(f=>fd.append('authorizer_attachments',f));
-    try { 
-      await axios.put(`${API_BASE_URL}/api/authorizer/authorize/${pendingId}`,fd,{headers:{'Content-Type':'multipart/form-data'}}); 
-      showToast('RMA authorized successfully.','success'); 
-      setShowConfirm(false); 
-      closeModal(); 
-      fetchPending(); 
-      fetchHistory(); 
-    } catch(e){ alert(e.response?.data?.error||'Failed'); } finally { setUploading(false); }
+    try { await api.put(`/api/authorizer/authorize/${pendingId}`,fd,{headers:{'Content-Type':'multipart/form-data'}}); showToast('RMA authorized successfully.','success'); setShowConfirm(false); closeModal(); fetchPending(); fetchHistory(); }
+    catch(e){ alert(e.response?.data?.error||'Failed'); } finally { setUploading(false); }
   };
 
-  const handleReject = async id => { const c=prompt('Enter rejection reason:'); if(!c) return; try { await axios.put(`${API_BASE_URL}/api/authorizer/reject/${id}`,{authorized_by:user.id,authorizer_comments:c}); showToast('RMA rejected.','info'); closeModal(); fetchPending(); } catch(e){ alert(e.response?.data?.error||'Failed'); } };
-  const handleBackToDealer = async id => { const c=prompt('Enter comments for dealer:'); if(!c) return; try { await axios.put(`${API_BASE_URL}/api/authorizer/back-to-dealer/${id}`,{authorized_by:user.id,authorizer_comments:c}); showToast('RMA returned to dealer.','info'); closeModal(); fetchPending(); } catch(e){ alert(e.response?.data?.error||'Failed'); } };
+  const handleReject = async id => { const c=prompt('Enter rejection reason:'); if(!c) return; try { await api.put(`/api/authorizer/reject/${id}`,{authorized_by:user.id,authorizer_comments:c}); showToast('RMA rejected.','info'); closeModal(); fetchPending(); } catch(e){ alert(e.response?.data?.error||'Failed'); } };
+  const handleBackToDealer = async id => { const c=prompt('Enter comments for dealer:'); if(!c) return; try { await api.put(`/api/authorizer/back-to-dealer/${id}`,{authorized_by:user.id,authorizer_comments:c}); showToast('RMA returned to dealer.','info'); closeModal(); fetchPending(); } catch(e){ alert(e.response?.data?.error||'Failed'); } };
 
   const handleUpdateAuthorized = async () => {
     if(!editData.authorized_by||!editData.return_date||!editData.return_received_by){ alert('All required fields must be filled'); return; }
@@ -300,13 +290,8 @@ export default function AuthorizerDashboard({ user, onLogout }) {
     Object.entries(editData).forEach(([k,v])=>fd.append(k,v));
     fd.append('attachment_names',JSON.stringify(editAtts.map(f=>f.name)));
     editAtts.forEach(f=>fd.append('authorizer_attachments',f));
-    try { 
-      await axios.put(`${API_BASE_URL}/api/authorizer/update_authorized/${selectedRMA.id}`,fd,{headers:{'Content-Type':'multipart/form-data'}}); 
-      showToast('Authorization updated.','success'); 
-      setSelectedRMA(null); 
-      setEditMode(false); 
-      fetchHistory(); 
-    } catch(e){ alert(e.response?.data?.error||'Update failed'); } finally { setUploading(false); }
+    try { await api.put(`/api/authorizer/update_authorized/${selectedRMA.id}`,fd,{headers:{'Content-Type':'multipart/form-data'}}); showToast('Authorization updated.','success'); setSelectedRMA(null); setEditMode(false); fetchHistory(); }
+    catch(e){ alert(e.response?.data?.error||'Update failed'); } finally { setUploading(false); }
   };
 
   // ─── JSX ───────────────────────────────────────────────────────────────────
@@ -398,7 +383,7 @@ export default function AuthorizerDashboard({ user, onLogout }) {
                   </tr>
                 ))}</tbody>
               </table>
-            </div>
+              </div>
             )}
           </div>
         )}

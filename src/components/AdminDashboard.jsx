@@ -1,14 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import axios from 'axios';
 import { BarChart, Bar, PieChart, Pie, Cell, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ComposedChart, Line } from 'recharts';
 import Navbar from './Navbar';
 import './AdminDashboard.css';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import logoSrc from '../assets/logo2.png';
+import api from '../api';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const API = `${import.meta.env.VITE_API_URL}/api/admin`;
+const API = '/api/admin';
 const TT = { contentStyle: { borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13px' } };
 const STATUS_COLORS = { pending_dealer:'#f59e0b', pending_authorizer:'#f97316', pending_approver:'#8b5cf6', authorized:'#10b981', approved:'#06b6d4', rejected:'#ef4444' };
 const PIE_COLORS = ['#1e3a5f','#2563eb','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899'];
@@ -113,7 +113,7 @@ const downloadRMAPDF = async (rma) => {
   } catch (_) {}
 
   // ── Company details BELOW logo ──
-  y = 35; // start below logo area
+  y = 35;
   doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.setTextColor(30,58,95);
   doc.text(COMPANY.name, lm, y); y += 5;
   doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(80,95,115);
@@ -416,8 +416,10 @@ function AdminDashboard({ user, onLogout }) {
     setRefreshing(true);
     try {
       const [rRes,dRes,sRes,pdRes] = await Promise.all([
-        axios.get(`${API}/all-rma`), axios.get(`${API}/all-dealers`),
-        axios.get(`${API}/stats`),   axios.get(`${API}/pending-dealers`),
+        api.get(`${API}/all-rma`),
+        api.get(`${API}/all-dealers`),
+        api.get(`${API}/stats`),
+        api.get(`${API}/pending-dealers`),
       ]);
       const parsed = (rRes.data.rmas||[]).map(parseRMA);
       const prev   = prevRmasRef.current;
@@ -435,13 +437,13 @@ function AdminDashboard({ user, onLogout }) {
   const handleViewRMA  = rma => { setSelectedRMA(parseRMA(rma)); setViewMode('view'); };
   const handleEditRMA  = rma => { setSelectedRMA(rma); setViewMode('edit'); setEditData(EDIT_FIELDS.reduce((a,f)=>{ a[f.key]=f.type==='checkbox'?(rma[f.key]||false):(rma[f.key]||''); return a; },{})); };
   const handleUpdateRMA = async () => {
-    try { await axios.put(`${API}/rma/${selectedRMA.id}`, editData); showToast('RMA updated successfully.','success'); setSelectedRMA(null); fetchAll(); }
+    try { await api.put(`${API}/rma/${selectedRMA.id}`, editData); showToast('RMA updated successfully.','success'); setSelectedRMA(null); fetchAll(); }
     catch(e) { showToast(e.response?.data?.error||'Failed to update','error'); }
   };
   const handleDeleteRMA = async id => {
     if (!window.confirm('Delete this RMA permanently? This cannot be undone.')) return;
     setDeletingId(id);
-    try { await axios.delete(`${API}/rma/${id}`); showToast('RMA deleted.','success'); fetchAll(); }
+    try { await api.delete(`${API}/rma/${id}`); showToast('RMA deleted.','success'); fetchAll(); }
     catch(e) { showToast(e.response?.data?.error||'Failed','error'); }
     finally { setDeletingId(null); }
   };
@@ -451,22 +453,22 @@ function AdminDashboard({ user, onLogout }) {
   const handleViewDealer  = d => { setSelectedDealer(d); setDealerViewMode('view'); };
   const handleEditDealer  = d => { setSelectedDealer(d); setDealerViewMode('edit'); setDealerEditData(DEALER_EDIT_FIELDS.reduce((a,f)=>{ a[f.key]=d[f.key]||''; return a; },{})); };
   const handleUpdateDealer = async () => {
-    try { await axios.put(`${API}/dealer/${selectedDealer.id}`, dealerEditData); showToast('Dealer updated successfully.','success'); setSelectedDealer(null); setDealerViewMode('view'); fetchAll(); }
+    try { await api.put(`${API}/dealer/${selectedDealer.id}`, dealerEditData); showToast('Dealer updated successfully.','success'); setSelectedDealer(null); setDealerViewMode('view'); fetchAll(); }
     catch(e) { showToast(e.response?.data?.error||'Failed to update dealer','error'); }
   };
   const handleChangePassword = async () => {
     if (changePwData.newPassword!==changePwData.confirmPassword) { showToast('Passwords do not match','error'); return; }
     if (changePwData.newPassword.length<6) { showToast('Password must be at least 6 characters','error'); return; }
-    try { await axios.put(`${API}/dealer/${selectedDealer.id}/change-password`,{new_password:changePwData.newPassword}); showToast('Password changed successfully.','success'); setShowChangePw(false); setChangePwData({newPassword:'',confirmPassword:''}); }
+    try { await api.put(`${API}/dealer/${selectedDealer.id}/change-password`,{new_password:changePwData.newPassword}); showToast('Password changed successfully.','success'); setShowChangePw(false); setChangePwData({newPassword:'',confirmPassword:''}); }
     catch(e) { showToast(e.response?.data?.error||'Failed to change password','error'); }
   };
   const approveDealer = async id => {
-    try { await axios.put(`${API}/approve-dealer/${id}`); showToast('Dealer approved.','success'); fetchAll(); }
+    try { await api.put(`${API}/approve-dealer/${id}`); showToast('Dealer approved.','success'); fetchAll(); }
     catch(e) { showToast(e.response?.data?.error||'Failed','error'); }
   };
   const rejectDealer = async id => {
     if (!window.confirm('Reject this dealer? This will delete the account.')) return;
-    try { await axios.delete(`${API}/reject-dealer/${id}`); showToast('Dealer rejected.','success'); fetchAll(); }
+    try { await api.delete(`${API}/reject-dealer/${id}`); showToast('Dealer rejected.','success'); fetchAll(); }
     catch(e) { showToast(e.response?.data?.error||'Failed','error'); }
   };
 
@@ -599,8 +601,11 @@ function AdminDashboard({ user, onLogout }) {
                   <tbody>
                     {allDealers.map(d=>(
                       <tr key={d.id}>
-                        <td>{d.company_name||'N/A'}</td><td>{d.username}</td><td>{d.email}</td>
-                        <td>{d.contact_number||'N/A'}</td><td>{d.city}, {d.barangay}</td>
+                        <td>{d.company_name||'N/A'}</td>
+                        <td>{d.username}</td>
+                        <td>{d.email}</td>
+                        <td>{d.contact_number||'N/A'}</td>
+                        <td>{d.city}, {d.barangay}</td>
                         <td>{d.is_approved?<span className="status-badge status-approved">Approved</span>:<span className="status-badge status-pending_dealer">Pending</span>}</td>
                         <td>{d.registered_at?.split('T')[0]}</td>
                         <td>
@@ -634,8 +639,11 @@ function AdminDashboard({ user, onLogout }) {
                   <tbody>
                     {pendingDealers.map(d=>(
                       <tr key={d.id}>
-                        <td>{d.company_name}</td><td>{d.username}</td><td>{d.email}</td>
-                        <td>{d.city}, {d.barangay}</td><td>{d.registered_at?.split('T')[0]}</td>
+                        <td>{d.company_name}</td>
+                        <td>{d.username}</td>
+                        <td>{d.email}</td>
+                        <td>{d.city}, {d.barangay}</td>
+                        <td>{d.registered_at?.split('T')[0]}</td>
                         <td>
                           <div className="action-btns">
                             <button className="btn-action btn-approve" onClick={()=>approveDealer(d.id)}>Approve</button>

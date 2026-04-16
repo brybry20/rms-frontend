@@ -178,7 +178,21 @@ const downloadRMAExcel = rma => {
 
 const exportTableExcel = (data, filename, sheetName) => {
   if (!data.length) return;
-  const ws = XLSX.utils.json_to_sheet(data.map(r => ({ 'RMA Number':r.rma_number,'Dealer':r.company_name||r.dealer_name,'Product':r.product_description,'Status':getStatusTxt(r.status),'Authorized By':r.authorizer_name||r.authorized_by||'N/A','Approved By':r.approver_name||r.approved_by||'N/A','Date Created':fmtDate(r.created_at),'Date Approved':fmtDate(r.approved_date||r.updated_at),'Return Type':r.return_type||'N/A','Reason':r.reason_for_return||'N/A','End User Company':r.end_user_company||'N/A','End User Location':r.end_user_location||'N/A' })));
+  const ws = XLSX.utils.json_to_sheet(data.map(r => ({ 
+    'RMA Number':r.rma_number,
+    'Distributor':r.distributor_name || r.company_name || 'N/A',
+    'Filer Name':r.filer_name || 'N/A',
+    'Authorized By':r.authorized_by || 'N/A',
+    'Product':r.product_description,
+    'Status':getStatusTxt(r.status),
+    'Approved By':r.approver_name||r.approved_by||'N/A',
+    'Date Created':fmtDate(r.created_at),
+    'Date Approved':fmtDate(r.approved_date||r.updated_at),
+    'Return Type':r.return_type||'N/A',
+    'Reason':r.reason_for_return||'N/A',
+    'End User Company':r.end_user_company||'N/A',
+    'End User Location':r.end_user_location||'N/A' 
+  })));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, sheetName);
   XLSX.writeFile(wb, `${filename}.xlsx`);
@@ -353,7 +367,6 @@ export default function ApproverDashboard({ user, onLogout }) {
     setUploading(true);
     const fd = new FormData();
     Object.entries(approveData).forEach(([k,v])=>fd.append(k,v));
-    // Send original filenames
     const attachmentNames = approverAtts.map(f => f.name);
     fd.append('attachment_names', JSON.stringify(attachmentNames));
     approverAtts.forEach(f=>fd.append('approver_attachments',f));
@@ -444,20 +457,31 @@ export default function ApproverDashboard({ user, onLogout }) {
           </div>
         </div>
 
+        {/* PENDING TABLE - Updated with Filer, Distributor, Authorized By */}
         {activeTab==='pending' && (
           <div className="panel">
             <div className="panel-header"><span className="panel-title">Authorized RMAs — Ready for Approval</span></div>
             {pendingRmas.length===0 ? <div className="empty-state">No pending approvals.</div> : (
               <div className="table-wrap">
                 <table className="data-table">
-                  <thead><tr><th>RMA Number</th><th>Dealer</th><th>Product</th><th>Authorized By</th><th>Actions</th></tr></thead>
+                  <thead>
+                    <tr>
+                      <th>RMA Number</th>
+                      <th>Distributor</th>
+                      <th>Filer Name</th>
+                      <th>Product</th>
+                      <th>Authorized By</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
                   <tbody>
                     {pendingRmas.map(r=>(
                       <tr key={r.id}>
                         <td className="td-rma">{r.rma_number}</td>
-                        <td>{r.company_name}</td>
+                        <td>{r.distributor_name || r.company_name || 'N/A'}</td>
+                        <td>{r.filer_name || 'N/A'}</td>
                         <td className="td-truncate">{(r.product_description||'').substring(0,40)}{r.product_description?.length>40?'…':''}</td>
-                        <td>{r.authorizer_name||'N/A'}</td>
+                        <td>{r.authorized_by || 'N/A'}</td>
                         <td><div className="action-btns">
                           <button className="btn-action btn-view" onClick={()=>handleViewOnly(r)}>Review</button>
                           <button className="btn-action btn-approve" onClick={()=>handleApproveMode(r)}>Approve</button>
@@ -471,26 +495,32 @@ export default function ApproverDashboard({ user, onLogout }) {
           </div>
         )}
 
+        {/* HISTORY TABLE - Updated with Filer, Distributor, Authorized By */}
         {activeTab==='history' && (
           <div className="panel">
             <div className="panel-header"><span className="panel-title">Approval History</span></div>
             {loading ? <div className="loading-state">Loading…</div> : historyRmas.length===0 ? <div className="empty-state">No approval history yet.</div> : (
               <div className="table-wrap">
                 <table className="data-table">
-                  <thead><tr>
-                    <th>RMA Number</th>
-                    <th>Dealer</th>
-                    <th>Status</th>
-                    <th>Approved By</th>
-                    <th>Date</th>
-                    <th>Actions</th>
-                  </tr>
+                  <thead>
+                    <tr>
+                      <th>RMA Number</th>
+                      <th>Distributor</th>
+                      <th>Filer Name</th>
+                      <th>Authorized By</th>
+                      <th>Status</th>
+                      <th>Approved By</th>
+                      <th>Date</th>
+                      <th>Actions</th>
+                    </tr>
                   </thead>
                   <tbody>
                     {historyRmas.map(r=>(
                       <tr key={r.id}>
                         <td className="td-rma">{r.rma_number}</td>
-                        <td>{r.company_name}</td>
+                        <td>{r.distributor_name || r.company_name || 'N/A'}</td>
+                        <td>{r.filer_name || 'N/A'}</td>
+                        <td>{r.authorized_by || 'N/A'}</td>
                         <td><StatusBadge s={r.status}/></td>
                         <td>{r.approver_name||r.approved_by||'N/A'}</td>
                         <td>{fmtDate(r.approved_date||r.updated_at)}</td>
@@ -510,7 +540,7 @@ export default function ApproverDashboard({ user, onLogout }) {
         )}
       </div>
 
-      {/* ── View Modal ── */}
+      {/* ── View Modal (no changes needed, already shows all fields) ── */}
       {selectedRMA && viewMode==='view' && (
         <div className="modal-overlay" onClick={closeModal}>
           <div className="modal-box modal-large" onClick={e=>e.stopPropagation()}>
@@ -609,7 +639,7 @@ export default function ApproverDashboard({ user, onLogout }) {
               <div className="detail-grid-2">
                 <div><span>Product</span>{selectedRMA.product_description||'N/A'}</div>
                 <div><span>Reason</span>{selectedRMA.reason_for_return||'N/A'}</div>
-                <div><span>Dealer</span>{selectedRMA.company_name||'N/A'}</div>
+                <div><span>Distributor</span>{selectedRMA.distributor_name||selectedRMA.company_name||'N/A'}</div>
                 <div><span>End User</span>{selectedRMA.end_user_company||'N/A'}</div>
               </div>
               <AttBlock atts={selectedRMA.attachments} label="Dealer Attachments" cls="section-blue"/>

@@ -9,12 +9,12 @@ const getApiUrl = () => {
   
   if (isProduction) {
     // Production: use Render backend
-    return 'https://rms-backend-1t69.onrender.com';
+    return 'https://rms-backend-vi71.onrender.com';
   }
   
   // Development: try local backend first
   // Pwede mo rin itong gawing dynamic
-  return 'http://localhost:5000';
+  return 'http://localhost:10000';
 };
 
 const API_BASE_URL = getApiUrl();

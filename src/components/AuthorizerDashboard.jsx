@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { BarChart, Bar, PieChart, Pie, Cell, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ComposedChart, Line } from 'recharts';
 import jsPDF from 'jspdf';
 import * as XLSX from 'xlsx';
 import Navbar from './Navbar';
@@ -9,6 +10,34 @@ import api from '../api';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const AUTH_BY_OPTS = ['Belle Tolentino', 'Chie Rogacion', 'Arvin Diocena', 'Mario Vargas', 'Kiko Magallanes'];
+const API = '/api/authorizer';
+const TT = { contentStyle: { borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13px' } };
+const STATUS_COLORS = { 
+  pending_dealer: '#f59e0b', 
+  pending_authorizer: '#f97316', 
+  pending_approver: '#8b5cf6', 
+  authorized: '#10b981', 
+  approved: '#06b6d4', 
+  rejected: '#ef4444' 
+};
+const PIE_COLORS = ['#1e3a5f','#2563eb','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899'];
+const STATUS_TEXT = { 
+  pending_dealer: 'Pending Dealer', 
+  pending_authorizer: 'Pending Auth', 
+  pending_approver: 'Pending Approver', 
+  authorized: 'Authorized', 
+  approved: 'Approved', 
+  rejected: 'Rejected' 
+};
+const STATUS_OPTS = [
+  { value:'all', label:'All Status' }, 
+  { value:'pending_dealer', label:'Pending Dealer' },
+  { value:'pending_authorizer', label:'Pending Auth' }, 
+  { value:'pending_approver', label:'Pending Approver' },
+  { value:'authorized', label:'Authorized' }, 
+  { value:'approved', label:'Approved' }, 
+  { value:'rejected', label:'Rejected' },
+];
 const COMPANY = {
   name: 'DELTAPLUS PHILIPPINES, INC.', vat: 'VAT REG. TIN-009-277-410-00000',
   sub: 'Dels Apparel Corporation',
@@ -16,13 +45,65 @@ const COMPANY = {
   tel: 'Tel. Nos.: +63 (2) 8655 7002  |  Fax No. +63 (2) 8655-0772 loc. 107', web: 'www.deltaplus.ph',
 };
 
+const EDIT_FIELDS = [
+  { label:'Status', key:'status', type:'select', opts:[
+    {v:'pending_dealer',l:'Pending Dealer'},{v:'pending_authorizer',l:'Pending Authorizer'},
+    {v:'pending_approver',l:'Pending Approver'},{v:'authorized',l:'Authorized'},
+    {v:'approved',l:'Approved'},{v:'rejected',l:'Rejected'}
+  ]},
+  { label:'Return Type', key:'return_type', type:'select', opts:[
+    {v:'Return Only',l:'Return Only'},{v:'Return for Credit',l:'Return for Credit'},{v:'Return for Exchange',l:'Return for Exchange'}
+  ]},
+  { label:'Reason for Return', key:'reason_for_return', type:'text' },
+  { label:'Warranty', key:'warranty', type:'checkbox' },
+  { label:'Filer Name', key:'filer_name', type:'text' },
+  { label:'Distributor Name', key:'distributor_name', type:'text' },
+  { label:'Product', key:'product', type:'text' },
+  { label:'Product Description', key:'product_description', type:'textarea' },
+  { label:'Work Environment', key:'work_environment', type:'text' },
+  { label:'PO Number', key:'po_number', type:'text' },
+  { label:'Sales Invoice Number', key:'sales_invoice_number', type:'text' },
+  { label:'Shipping Date', key:'shipping_date', type:'date' },
+  { label:'Return Date', key:'return_date', type:'date' },
+  { label:'End User Company', key:'end_user_company', type:'text' },
+  { label:'End User Location', key:'end_user_location', type:'text' },
+  { label:'End User Industry', key:'end_user_industry', type:'text' },
+  { label:'End User Contact Person', key:'end_user_contact_person', type:'text' },
+  { label:'Problem Description', key:'problem_description', type:'textarea' },
+  { label:'Dealer Comments', key:'dealer_comments', type:'textarea' },
+  { label:'Authorized By', key:'authorized_by', type:'text' },
+  { label:'Authorized Date', key:'authorized_date', type:'date' },
+  { label:'Return Received By', key:'return_received_by', type:'text' },
+  { label:'Authorizer Comments', key:'authorizer_comments', type:'textarea' },
+  { label:'Approved By', key:'approved_by', type:'text' },
+  { label:'Approved Date', key:'approved_date', type:'date' },
+  { label:'Approved With', key:'approved_with', type:'select', opts:[
+    {v:'Replacement Unit',l:'Replacement Unit'},{v:'Store Credit',l:'Store Credit'},{v:'Refund',l:'Refund'},
+    {v:'Back Office Mistake - BOM1N',l:'Back Office Mistake (BOM1N)'},{v:'Back Office Mistake - BOM2H',l:'Back Office Mistake (BOM2H)'},
+    {v:'Back Office Mistake - BOM3M',l:'Back Office Mistake (BOM3M)'},{v:'Cancelled Order (CO)',l:'Cancelled Order (CO)'},
+    {v:'Changed Model (CM)',l:'Changed Model (CM)'},{v:'Changed Size / Color (CH)',l:'Changed Size / Color (CH)'},
+    {v:'Damaged Item (D)',l:'Damaged Item (D)'},{v:'Dealer Mistake (DM)',l:'Dealer Mistake (DM)'},
+    {v:'Manufacturing Issue (Man)',l:'Manufacturing Issue (Man)'},{v:'Missing Item (MI)',l:'Missing Item (MI)'},
+    {v:'Payment Issue (PI)',l:'Payment Issue (PI)'},{v:'Sample Return (SA)',l:'Sample Return (SA)'},
+    {v:'Not Received (NR)',l:'Not Received (NR)'},{v:'Not Delivered (ND)',l:'Not Delivered (ND)'},
+    {v:'System Error (SE)',l:'System Error (SE)'},{v:'Preparator Mistake (PM)',l:'Preparator Mistake (PM)'},
+  ]},
+  { label:'Replacement Order / Credit Note No.', key:'replacement_order_no', type:'text' },
+  { label:'Closed Date', key:'closed_date', type:'date' },
+  { label:'Approver Comments', key:'approver_comments', type:'textarea' },
+];
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const parseAtts = a => !a ? [] : Array.isArray(a) ? a : (typeof a === 'string' ? (() => { try { return JSON.parse(a); } catch { return []; } })() : []);
 const fmtDate = s => { if (!s) return 'N/A'; const d = new Date(s); if (isNaN(d)) return s; return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`; };
-const statusTxt = s => ({ pending_dealer: 'Pending Dealer', pending_authorizer: 'Pending Auth', authorized: 'Authorized', approved: 'Approved', rejected: 'Rejected' }[s] || s);
+const statusTxt = s => STATUS_TEXT[s] || s;
 const getIcon = (rt, url) => rt === 'image' ? '🖼️' : rt === 'video' ? '🎥' : url?.includes('.pdf') ? '📄' : url?.includes('.doc') ? '📝' : url?.includes('.xls') ? '📊' : '📎';
 const fallbackName = url => { if (!url) return 'File'; return url.split('/').pop().replace(/^v\d+_/, '').substring(0, 30); };
 const dlFile = (url, name) => { const a = document.createElement('a'); a.href = url; a.download = name || 'download'; document.body.appendChild(a); a.click(); document.body.removeChild(a); };
+const truncStr = (s, n) => s?.length > n ? s.slice(0, n) + '…' : (s || '');
+const countBy = (arr, key) => arr.reduce((a, r) => { const k = r[key] || 'Unknown'; a[k] = (a[k]||0)+1; return a; }, {});
+const parseRMA = r => ({ ...r, attachments: parseAtts(r.attachments), authorizer_attachments: parseAtts(r.authorizer_attachments), approver_attachments: parseAtts(r.approver_attachments) });
+const getStatusTxt = s => STATUS_TEXT[s] || s;
 
 // ─── PDF Export (styled like AdminDashboard) ──────────────────────────────────
 const downloadRMAPDF = async (rma) => {
@@ -208,7 +289,12 @@ export default function AuthorizerDashboard({ user, onLogout }) {
   const [activeTab, setActiveTab] = useState('pending');
   const [pendingRmas, setPendingRmas] = useState([]);
   const [historyRmas, setHistoryRmas] = useState([]);
+  const [allRmas, setAllRmas] = useState([]);
+  const [filteredRmas, setFilteredRmas] = useState([]);
+  const [stats, setStats] = useState({});
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [selectedRMA, setSelectedRMA] = useState(null);
   const [viewMode, setViewMode] = useState('view');
   const [editMode, setEditMode] = useState(false);
@@ -217,43 +303,105 @@ export default function AuthorizerDashboard({ user, onLogout }) {
   const [toast, setToast] = useState({ show: false, message: '', type: '' });
   const [updateBanner, setUpdateBanner] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [lastFetch, setLastFetch] = useState(Date.now());
   const [authAtts, setAuthAtts] = useState([]);
   const [authPrev, setAuthPrev] = useState([]);
   const [editAtts, setEditAtts] = useState([]);
   const [editPrev, setEditPrev] = useState([]);
+  const [editDataAdmin, setEditDataAdmin] = useState({});
+  const [deletingId, setDeletingId] = useState(null);
   const prevPendingRef = useRef([]);
 
   const [authData, setAuthData] = useState({ authorized_by: '', authorized_date: new Date().toISOString().split('T')[0], return_date: '', return_received_by: '', authorizer_comments: '' });
   const [editData, setEditData] = useState({ authorized_by: '', return_date: '', return_received_by: '', authorizer_comments: '' });
 
   useEffect(() => { document.title = 'Authorizer Dashboard'; }, []);
-  useEffect(() => { fetchPending(); fetchHistory(); const iv = setInterval(() => { fetchPending(); fetchHistory(); }, 5000); return () => clearInterval(iv); }, []);
-  useEffect(() => { if (toast.show) { const t = setTimeout(() => setToast({ show: false, message: '', type: '' }), 3000); return () => clearTimeout(t); } }, [toast.show]);
+  
+  useEffect(() => {
+    fetchAll();
+    const iv = setInterval(fetchAll, 30000);
+    return () => clearInterval(iv);
+  }, []);
 
-  const showToast = (message, type) => setToast({ show: true, message, type });
+  useEffect(() => {
+    let f = [...allRmas];
+    if (searchTerm) f = f.filter(r => [r.rma_number, r.product_description, r.company_name, r.distributor_name, r.filer_name, r.end_user_location].some(v => (v || '').toLowerCase().includes(searchTerm.toLowerCase())));
+    if (statusFilter !== 'all') f = f.filter(r => r.status === statusFilter);
+    setFilteredRmas(f);
+  }, [allRmas, searchTerm, statusFilter]);
 
-  const fetchPending = async () => {
+  const fetchAll = useCallback(async () => {
+    setRefreshing(true);
     try {
-      const res = await api.get('/api/authorizer/pending');
-      const parsed = (res.data.rmas || []).map(r => ({ ...r, attachments: parseAtts(r.attachments) }));
+      const [pRes, hRes, aRes, sRes] = await Promise.all([
+        api.get('/api/authorizer/pending'),
+        api.get('/api/authorizer/history'),
+        api.get('/api/authorizer/all-rma'),
+        api.get('/api/authorizer/stats')
+      ]);
+      
+      const pending = (pRes.data.rmas || []).map(r => ({ ...r, attachments: parseAtts(r.attachments) }));
+      const history = (hRes.data.rmas || []).map(r => ({ ...r, attachments: parseAtts(r.attachments), authorizer_attachments: parseAtts(r.authorizer_attachments) }));
+      const all = (aRes.data.rmas || []).map(parseRMA);
+      
+      // Update banner logic for pending
       const prev = prevPendingRef.current;
       const prevIds = prev.map(r => r.id);
-      const newIds = parsed.map(r => r.id).filter(id => !prevIds.includes(id));
-      const changed = prev.length > 0 ? parsed.filter(r => { const o = prev.find(x => x.id === r.id); return o && o.status !== r.status; }) : [];
-      const updateCount = newIds.length + changed.length;
-      if (updateCount > 0) { setUpdateBanner({ count: updateCount, isNew: newIds.length > 0 }); setTimeout(() => setUpdateBanner(null), 5000); }
-      prevPendingRef.current = parsed;
-      setPendingRmas(parsed); setLastFetch(Date.now());
-    } catch (e) { console.error(e); }
+      const newIds = pending.map(r => r.id).filter(id => !prevIds.includes(id));
+      if (newIds.length > 0) {
+        setUpdateBanner({ count: newIds.length, isNew: true });
+        setTimeout(() => setUpdateBanner(null), 5000);
+      }
+      
+      prevPendingRef.current = pending;
+      setPendingRmas(pending);
+      setHistoryRmas(history);
+      setAllRmas(all);
+      setStats(sRes.data);
+      setLastFetch(Date.now());
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  // Admin-style RMA actions
+  const handleEditRMAAdmin = rma => { 
+    setSelectedRMA(rma); 
+    setViewMode('edit_admin'); 
+    setEditDataAdmin(EDIT_FIELDS.reduce((a, f) => { 
+      a[f.key] = f.type === 'checkbox' ? (rma[f.key] || false) : (rma[f.key] || ''); 
+      return a; 
+    }, {})); 
   };
 
-  const fetchHistory = async () => {
-    try {
-      const res = await api.get('/api/authorizer/history');
-      setHistoryRmas((res.data.rmas || []).map(r => ({ ...r, attachments: parseAtts(r.attachments), authorizer_attachments: parseAtts(r.authorizer_attachments) })));
-    } catch (e) { console.error(e); } finally { setLoading(false); }
+  const handleUpdateRMAAdmin = async () => {
+    try { 
+      await api.put(`/api/authorizer/rma/${selectedRMA.id}`, editDataAdmin); 
+      showToast('RMA updated successfully.', 'success'); 
+      setSelectedRMA(null); 
+      setViewMode('view');
+      fetchAll(); 
+    }
+    catch (e) { showToast(e.response?.data?.error || 'Failed to update', 'error'); }
   };
+
+  const handleDeleteRMA = async id => {
+    if (!window.confirm('Delete this RMA permanently? This cannot be undone.')) return;
+    setDeletingId(id);
+    try { 
+      await api.delete(`/api/authorizer/rma/${id}`); 
+      showToast('RMA deleted.', 'success'); 
+      fetchAll(); 
+    }
+    catch (e) { showToast(e.response?.data?.error || 'Failed', 'error'); }
+    finally { setDeletingId(null); }
+  };
+
+  const showToast = (message, type) => setToast({ show: true, message, type });
 
   const closeModal = () => { setSelectedRMA(null); setViewMode('view'); setAuthAtts([]); setAuthPrev([]); setAuthData({ authorized_by: '', authorized_date: new Date().toISOString().split('T')[0], return_date: '', return_received_by: '', authorizer_comments: '' }); };
 
@@ -290,9 +438,41 @@ export default function AuthorizerDashboard({ user, onLogout }) {
     Object.entries(editData).forEach(([k, v]) => fd.append(k, v));
     fd.append('attachment_names', JSON.stringify(editAtts.map(f => f.name)));
     editAtts.forEach(f => fd.append('authorizer_attachments', f));
-    try { await api.put(`/api/authorizer/update_authorized/${selectedRMA.id}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } }); showToast('Authorization updated.', 'success'); setSelectedRMA(null); setEditMode(false); fetchHistory(); }
+    try { await api.put(`/api/authorizer/update_authorized/${selectedRMA.id}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } }); showToast('Authorization updated.', 'success'); setSelectedRMA(null); setEditMode(false); fetchAll(); }
     catch (e) { alert(e.response?.data?.error || 'Update failed'); } finally { setUploading(false); }
   };
+
+  // ─── Chart Builder ────────────────────────────────────────────────────────────
+  const buildCharts = (rmas) => {
+    const monthly = Object.entries(rmas.reduce((a, r) => { const k = r.created_at?.slice(0, 7); if (k) a[k] = (a[k] || 0) + 1; return a; }, {})).sort().slice(-6).map(([month, count]) => ({ month, count }));
+    const monthlyApproval = Object.entries(rmas.reduce((a, r) => { const k = r.created_at?.slice(0, 7); if (!k) return a; if (!a[k]) a[k] = { month: k, approved: 0, rejected: 0 }; if (r.status === 'approved') a[k].approved++; if (r.status === 'rejected') a[k].rejected++; return a; }, {})).sort().slice(-6).map(([, v]) => v);
+    const avgResolution = (() => {
+      const m = {};
+      rmas.forEach(r => { const k = r.created_at?.slice(0, 7); if (!k) return; const end = r.closed_date || r.approved_date; if (!end) return; const d = (new Date(end) - new Date(r.created_at)) / 86400000; if (d < 0 || d > 365) return; if (!m[k]) m[k] = { month: k, total: 0, count: 0 }; m[k].total += d; m[k].count++; });
+      return Object.values(m).sort((a, b) => a.month.localeCompare(b.month)).slice(-6).map(({ month, total, count }) => ({ month, avgDays: count ? +(total / count).toFixed(1) : 0 }));
+    })();
+    const toPie = key => Object.entries(countBy(rmas, key)).map(([name, value]) => ({ name, value }));
+    const toBar = (key, n = 8) => Object.entries(countBy(rmas, key)).sort((a, b) => b[1] - a[1]).slice(0, n).map(([name, count]) => ({ name: truncStr(name, 18), count }));
+    const toBarV = (key, n = 8) => Object.entries(countBy(rmas, key)).sort((a, b) => b[1] - a[1]).slice(0, n).map(([name, value]) => ({ name: truncStr(name, 20), value }));
+    const splitLoc = (rmas, idx) => Object.entries(rmas.reduce((a, r) => { const p = (r.end_user_location || '').split(',').map(s => s.trim())[idx]; if (p) a[p] = (a[p] || 0) + 1; return a; }, {})).map(([name, count]) => ({ name: truncStr(name, 20), count })).sort((a, b) => b.count - a.count).slice(0, 10);
+    return {
+      monthly, monthlyApproval, avgResolution,
+      returnType: toPie('return_type'), approvedWith: toPie('approved_with'), workEnv: toPie('work_environment'),
+      topDealers: toBar('company_name'), industry: toBar('end_user_industry'), products: toBarV('product'),
+      warranty: [{ name: 'Under Warranty', value: rmas.filter(r => r.warranty).length }, { name: 'Out of Warranty', value: rmas.filter(r => !r.warranty).length }],
+      regionData: splitLoc(rmas, 0), cityData: splitLoc(rmas, 1), barangayData: splitLoc(rmas, 2),
+    };
+  };
+
+  const charts = buildCharts(allRmas);
+
+  const StatusBadge = ({ s }) => <span className={`status-badge status-${s}`}>{getStatusTxt(s)}</span>;
+  const ChartCard = ({ title, wide, children }) => (
+    <div className={`chart-card${wide ? ' chart-wide' : ''}`}>
+      <div className="chart-title">{title}</div>
+      {children}
+    </div>
+  );
 
   // ─── JSX ───────────────────────────────────────────────────────────────────
   return (
@@ -334,10 +514,12 @@ export default function AuthorizerDashboard({ user, onLogout }) {
           <div style={{ display: 'flex', gap: 4 }}>
             <button className={`tab-btn${activeTab === 'pending' ? ' active' : ''}`} onClick={() => setActiveTab('pending')}>Pending ({pendingRmas.length})</button>
             <button className={`tab-btn${activeTab === 'history' ? ' active' : ''}`} onClick={() => setActiveTab('history')}>History ({historyRmas.length})</button>
+            <button className={`tab-btn${activeTab === 'all' ? ' active' : ''}`} onClick={() => setActiveTab('all')}>All RMAs ({allRmas.length})</button>
+            <button className={`tab-btn${activeTab === 'charts' ? ' active' : ''}`} onClick={() => setActiveTab('charts')}>Analytics</button>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button className="btn-export" onClick={() => exportTableXLSX(activeTab === 'pending' ? pendingRmas : historyRmas, activeTab === 'pending' ? 'Pending_Authorization' : 'Authorization_History')}>📎 Excel</button>
-            <button className="btn-export btn-pdf" onClick={() => exportTablePDF(activeTab === 'pending' ? pendingRmas : historyRmas, activeTab === 'pending' ? 'Pending Authorization' : 'Authorization History')}>📄 PDF</button>
+            <button className="btn-export" onClick={() => exportTableXLSX(activeTab === 'pending' ? pendingRmas : activeTab === 'all' ? allRmas : historyRmas, activeTab === 'pending' ? 'Pending_Authorization' : activeTab === 'all' ? 'All_RMAs' : 'Authorization_History')}>📎 Excel</button>
+            <button className="btn-export btn-pdf" onClick={() => exportTablePDF(activeTab === 'pending' ? pendingRmas : activeTab === 'all' ? allRmas : historyRmas, activeTab === 'pending' ? 'Pending Authorization' : activeTab === 'all' ? 'All RMAs' : 'Authorization History')}>📄 PDF</button>
           </div>
         </div>
 
@@ -385,6 +567,100 @@ export default function AuthorizerDashboard({ user, onLogout }) {
               </table>
               </div>
             )}
+          </div>
+        )}
+
+        {activeTab === 'all' && (
+          <div className="panel">
+            <div className="panel-header">
+              <span className="panel-title">All RMA Requests</span>
+              <div className="panel-actions">
+                <div className="search-wrap">
+                  <input className="search-input" style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 6, padding: '6px 12px', fontSize: 13 }} placeholder="Search RMA, filer, product…" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                </div>
+                <select className="filter-select" style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 6, padding: '6px 8px', fontSize: 13 }} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+                  {STATUS_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+            </div>
+            {loading ? <div className="loading-state">Loading data…</div> : filteredRmas.length === 0 ? <div className="empty-state">No RMA requests found.</div> : (
+              <div className="table-wrap">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>RMA Number</th>
+                      <th>Filer Name</th>
+                      <th>Distributor</th>
+                      <th>Product</th>
+                      <th>Status</th>
+                      <th>Date Created</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredRmas.map(r => (
+                      <tr key={r.id}>
+                        <td className="td-rma">{r.rma_number}</td>
+                        <td>{r.filer_name || 'N/A'}</td>
+                        <td>{r.company_name || r.distributor_name || 'N/A'}</td>
+                        <td className="td-truncate">{truncStr(r.product_description || '', 40)}</td>
+                        <td><StatusBadge s={r.status} /></td>
+                        <td>{fmtDate(r.created_at)}</td>
+                        <td>
+                          <div className="action-btns">
+                            <button className="btn-action btn-view" onClick={() => { setSelectedRMA(r); setViewMode('view'); }}>View</button>
+                            <button className="btn-action btn-edit" onClick={() => handleEditRMAAdmin(r)}>Edit</button>
+                            <button className="btn-action btn-delete" onClick={() => handleDeleteRMA(r.id)} disabled={deletingId === r.id}>{deletingId === r.id ? '…' : 'Delete'}</button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'charts' && (
+          <div className="charts-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: 20, marginTop: 20 }}>
+            <ChartCard title="RMA Volume by Month" wide>
+              <ResponsiveContainer width="100%" height={220}>
+                <AreaChart data={charts.monthly}>
+                  <defs><linearGradient id="aG" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#2563eb" stopOpacity={0.25} /><stop offset="95%" stopColor="#2563eb" stopOpacity={0} /></linearGradient></defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" /><XAxis dataKey="month" tick={{ fontSize: 12, fill: '#64748b' }} /><YAxis tick={{ fontSize: 12, fill: '#64748b' }} /><Tooltip {...TT} />
+                  <Area type="monotone" dataKey="count" stroke="#2563eb" fill="url(#aG)" strokeWidth={2} name="RMAs" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </ChartCard>
+            <ChartCard title="Return Type Distribution">
+              <ResponsiveContainer width="100%" height={220}>
+                <PieChart>
+                  <Pie data={charts.returnType} innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
+                    {charts.returnType.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                  </Pie>
+                  <Tooltip {...TT} /><Legend wrapperStyle={{ fontSize: '11px' }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </ChartCard>
+            <ChartCard title="Status Distribution">
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={Object.entries(stats.status_counts || {}).map(([k, v]) => ({ name: getStatusTxt(k), count: v }))}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" /><XAxis dataKey="name" tick={{ fontSize: 10 }} /><YAxis tick={{ fontSize: 10 }} /><Tooltip {...TT} />
+                  <Bar dataKey="count">
+                    {Object.entries(stats.status_counts || {}).map(([k], i) => <Cell key={i} fill={STATUS_COLORS[k] || '#cbd5e1'} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </ChartCard>
+            <ChartCard title="Top Distributors">
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={charts.topDealers} layout="vertical" margin={{ left: 30 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f0f0f0" /><XAxis type="number" hide /><YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={80} /><Tooltip {...TT} />
+                  <Bar dataKey="count" fill="#2563eb" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </ChartCard>
           </div>
         )}
       </div>
@@ -532,6 +808,42 @@ export default function AuthorizerDashboard({ user, onLogout }) {
             <div className="modal-footer">
               <button className="btn-ghost-dark" onClick={() => { setSelectedRMA(null); setEditMode(false); }}>Cancel</button>
               <button className="btn-primary-dark" onClick={handleUpdateAuthorized} disabled={uploading}>{uploading ? 'Saving…' : 'Save Changes'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* FULL EDIT MODAL (Admin Style) */}
+      {selectedRMA && viewMode === 'edit_admin' && (
+        <div className="modal-overlay" onClick={() => { setSelectedRMA(null); setViewMode('view'); }}>
+          <div className="modal-box modal-large" onClick={e => e.stopPropagation()}>
+            <div className="modal-head"><h2>Edit RMA Details — {selectedRMA.rma_number}</h2><button className="modal-close" onClick={() => { setSelectedRMA(null); setViewMode('view'); }}>×</button></div>
+            <div className="modal-body" style={{ maxHeight: '70vh', overflowY: 'auto', padding: '20px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                {EDIT_FIELDS.map(f => (
+                  <div key={f.key} className="form-group">
+                    <label>{f.label}</label>
+                    {f.type === 'select' ? (
+                      <select value={editDataAdmin[f.key] || ''} onChange={e => setEditDataAdmin({ ...editDataAdmin, [f.key]: e.target.value })}>
+                        {f.opts.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+                      </select>
+                    ) : f.type === 'checkbox' ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+                        <input type="checkbox" checked={editDataAdmin[f.key] || false} onChange={e => setEditDataAdmin({ ...editDataAdmin, [f.key]: e.target.checked })} />
+                        <span>Under Warranty</span>
+                      </div>
+                    ) : f.type === 'textarea' ? (
+                      <textarea rows="3" value={editDataAdmin[f.key] || ''} onChange={e => setEditDataAdmin({ ...editDataAdmin, [f.key]: e.target.value })} />
+                    ) : (
+                      <input type={f.type} value={editDataAdmin[f.key] || ''} onChange={e => setEditDataAdmin({ ...editDataAdmin, [f.key]: e.target.value })} />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn-ghost-dark" onClick={() => { setSelectedRMA(null); setViewMode('view'); }}>Cancel</button>
+              <button className="btn-primary-dark" onClick={handleUpdateRMAAdmin}>Save Changes</button>
             </div>
           </div>
         </div>

@@ -424,12 +424,12 @@ export default function AuthorizerDashboard({ user, onLogout }) {
     Object.entries(authData).forEach(([k, v]) => fd.append(k, v));
     fd.append('attachment_names', JSON.stringify(authAtts.map(f => f.name)));
     authAtts.forEach(f => fd.append('authorizer_attachments', f));
-    try { await api.put(`/api/authorizer/authorize/${pendingId}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } }); showToast('RMA authorized successfully.', 'success'); setShowConfirm(false); closeModal(); fetchPending(); fetchHistory(); }
+    try { await api.put(`/api/authorizer/authorize/${pendingId}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } }); showToast('RMA authorized successfully.', 'success'); setShowConfirm(false); closeModal(); fetchAll(); }
     catch (e) { alert(e.response?.data?.error || 'Failed'); } finally { setUploading(false); }
   };
 
-  const handleReject = async id => { const c = prompt('Enter rejection reason:'); if (!c) return; try { await api.put(`/api/authorizer/reject/${id}`, { authorized_by: user.id, authorizer_comments: c }); showToast('RMA rejected.', 'info'); closeModal(); fetchPending(); } catch (e) { alert(e.response?.data?.error || 'Failed'); } };
-  const handleBackToDealer = async id => { const c = prompt('Enter comments for dealer:'); if (!c) return; try { await api.put(`/api/authorizer/back-to-dealer/${id}`, { authorized_by: user.id, authorizer_comments: c }); showToast('RMA returned to dealer.', 'info'); closeModal(); fetchPending(); } catch (e) { alert(e.response?.data?.error || 'Failed'); } };
+  const handleReject = async id => { const c = prompt('Enter rejection reason:'); if (!c) return; try { await api.put(`/api/authorizer/reject/${id}`, { authorized_by: user.id, authorizer_comments: c }); showToast('RMA rejected.', 'info'); closeModal(); fetchAll(); } catch (e) { alert(e.response?.data?.error || 'Failed'); } };
+  const handleBackToDealer = async id => { const c = prompt('Enter comments for dealer:'); if (!c) return; try { await api.put(`/api/authorizer/back-to-dealer/${id}`, { authorized_by: user.id, authorizer_comments: c }); showToast('RMA returned to dealer.', 'info'); closeModal(); fetchAll(); } catch (e) { alert(e.response?.data?.error || 'Failed'); } };
 
   const handleUpdateAuthorized = async () => {
     if (!editData.authorized_by || !editData.return_date || !editData.return_received_by) { alert('All required fields must be filled'); return; }
@@ -499,7 +499,7 @@ export default function AuthorizerDashboard({ user, onLogout }) {
       <div className="dash-container">
         <div className="top-bar">
           <span className="last-updated">Last updated: {new Date(lastFetch).toLocaleTimeString()}<span className="live-dot" /></span>
-          <button className="btn-refresh" onClick={() => { fetchPending(); fetchHistory(); }}>
+          <button className="btn-refresh" onClick={() => fetchAll()}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" /><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" /></svg>
             Refresh
           </button>

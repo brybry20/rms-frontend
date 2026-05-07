@@ -462,19 +462,19 @@ export default function ApproverDashboard({ user, onLogout }) {
     try {
       await api.put(`/api/approver/approve/${id}`, fd, { headers:{'Content-Type':'multipart/form-data'} });
       showToast('RMA approved successfully.','success'); closeModal(); setApproverAtts([]); setAttPreviews([]);
-      fetchPending(); fetchHistory();
+      fetchAll();
     } catch(e) { alert(e.response?.data?.error||'Failed to approve'); } finally { setUploading(false); }
   };
 
   const handleReject = async id => {
     const comments = prompt('Enter rejection reason:'); if (!comments) return;
-    try { await api.put(`/api/approver/reject/${id}`,{approved_by:user.id,approver_comments:comments}); showToast('RMA rejected.','info'); closeModal(); fetchPending(); fetchHistory(); }
+    try { await api.put(`/api/approver/reject/${id}`,{approved_by:user.id,approver_comments:comments}); showToast('RMA rejected.','info'); closeModal(); fetchAll(); }
     catch(e) { alert(e.response?.data?.error||'Failed to reject'); }
   };
 
   const handleRequestChange = async id => {
     const comments = prompt('Enter comments for dealer:'); if (!comments) return;
-    try { await api.put(`/api/approver/request-change/${id}`,{approved_by:user.id,approver_comments:comments}); showToast('Changes requested.','info'); closeModal(); fetchPending(); fetchHistory(); }
+    try { await api.put(`/api/approver/request-change/${id}`,{approved_by:user.id,approver_comments:comments}); showToast('Changes requested.','info'); closeModal(); fetchAll(); }
     catch(e) { alert(e.response?.data?.error||'Failed'); }
   };
 
@@ -589,7 +589,7 @@ export default function ApproverDashboard({ user, onLogout }) {
             <span className="live-dot"/>
             Last updated: {new Date(lastFetch).toLocaleTimeString()}
           </span>
-          <button className="btn-refresh" onClick={()=>{ fetchPending(); fetchHistory(); }}>
+          <button className="btn-refresh" onClick={()=>fetchAll()}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
             Refresh
           </button>

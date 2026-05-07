@@ -331,19 +331,14 @@ export default function AuthorizerDashboard({ user, onLogout }) {
     setFilteredRmas(f);
   }, [allRmas, searchTerm, statusFilter]);
 
-  const fetchAll = useCallback(async () => {
-    setRefreshing(true);
     try {
-      const [pRes, hRes, aRes, sRes] = await Promise.all([
+      const [pRes, hRes] = await Promise.all([
         api.get('/api/authorizer/pending'),
-        api.get('/api/authorizer/history'),
-        api.get('/api/authorizer/all-rma'),
-        api.get('/api/authorizer/stats')
+        api.get('/api/authorizer/history')
       ]);
       
       const pending = (pRes.data.rmas || []).map(r => ({ ...r, attachments: parseAtts(r.attachments) }));
       const history = (hRes.data.rmas || []).map(r => ({ ...r, attachments: parseAtts(r.attachments), authorizer_attachments: parseAtts(r.authorizer_attachments) }));
-      const all = (aRes.data.rmas || []).map(parseRMA);
       
       // Update banner logic for pending
       const prev = prevPendingRef.current;
@@ -357,11 +352,21 @@ export default function AuthorizerDashboard({ user, onLogout }) {
       prevPendingRef.current = pending;
       setPendingRmas(pending);
       setHistoryRmas(history);
-      setAllRmas(all);
-      setStats(sRes.data);
+
+      // Optional routes that might 404 if backend not updated
+      try {
+        const aRes = await api.get('/api/authorizer/all-rma');
+        setAllRmas((aRes.data.rmas || []).map(parseRMA));
+      } catch (e) { console.warn('all-rma endpoint not found', e); }
+
+      try {
+        const sRes = await api.get('/api/authorizer/stats');
+        setStats(sRes.data || {});
+      } catch (e) { console.warn('stats endpoint not found', e); }
+
       setLastFetch(Date.now());
     } catch (e) {
-      console.error(e);
+      console.error('Fetch error:', e);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -532,7 +537,7 @@ export default function AuthorizerDashboard({ user, onLogout }) {
                 <tbody>{pendingRmas.map(r => (
                   <tr key={r.id}>
                     <td className="td-rma">{r.rma_number}</td>
-                    <td>{r.company_name}</td>
+                    <td>{r.company_name || r.distributor_name || 'N/A'}</td>
                     <td className="td-truncate">{(r.product_description || '').substring(0, 40)}{r.product_description?.length > 40 ? '…' : ''}</td>
                     <td>{fmtDate(r.created_at)}</td>
                     <td><div className="action-btns">
@@ -555,7 +560,7 @@ export default function AuthorizerDashboard({ user, onLogout }) {
                 <tbody>{historyRmas.map(r => (
                   <tr key={r.id}>
                     <td className="td-rma">{r.rma_number}</td>
-                    <td>{r.company_name}</td>
+                    <td>{r.company_name || r.distributor_name || 'N/A'}</td>
                     <td>{r.authorized_by || 'N/A'}</td>
                     <td>{fmtDate(r.return_date)}</td>
                     <td><div className="action-btns">

@@ -397,16 +397,13 @@ export default function ApproverDashboard({ user, onLogout }) {
   const fetchAll = useCallback(async () => {
     setRefreshing(true);
     try {
-      const [pRes, hRes, aRes, sRes] = await Promise.all([
+      const [pRes, hRes] = await Promise.all([
         api.get('/api/approver/pending'),
-        api.get('/api/approver/history'),
-        api.get('/api/approver/all-rma'),
-        api.get('/api/approver/stats')
+        api.get('/api/approver/history')
       ]);
       
       const pending = (pRes.data.rmas||[]).map(r=>({ ...r, attachments:parseAtts(r.attachments), authorizer_attachments:parseAtts(r.authorizer_attachments) }));
       const history = (hRes.data.rmas||[]).map(r=>({ ...r, attachments:parseAtts(r.attachments), authorizer_attachments:parseAtts(r.authorizer_attachments), approver_attachments:parseAtts(r.approver_attachments) }));
-      const all = (aRes.data.rmas || []).map(parseRMA);
       
       const prev = prevRmasRef.current;
       const brandNew = pending.filter(r=>!prev.map(x=>x.id).includes(r.id));
@@ -417,12 +414,22 @@ export default function ApproverDashboard({ user, onLogout }) {
       
       setPendingRmas(pending);
       setHistoryRmas(history);
-      setAllRmas(all);
-      setStats(sRes.data);
       prevRmasRef.current = pending;
+
+      // Optional routes that might 404
+      try {
+        const aRes = await api.get('/api/approver/all-rma');
+        setAllRmas((aRes.data.rmas || []).map(parseRMA));
+      } catch (e) { console.warn('all-rma endpoint not found', e); }
+
+      try {
+        const sRes = await api.get('/api/approver/stats');
+        setStats(sRes.data || {});
+      } catch (e) { console.warn('stats endpoint not found', e); }
+
       setLastFetch(Date.now());
     } catch(e) {
-      console.error(e);
+      console.error('Fetch error:', e);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -633,7 +640,7 @@ export default function ApproverDashboard({ user, onLogout }) {
                     {pendingRmas.map(r=>(
                       <tr key={r.id}>
                         <td className="td-rma">{r.rma_number}</td>
-                        <td>{r.distributor_name || r.company_name || 'N/A'}</td>
+                        <td>{r.company_name || r.distributor_name || 'N/A'}</td>
                         <td>{r.filer_name || 'N/A'}</td>
                         <td className="td-truncate">{(r.product_description||'').substring(0,40)}{r.product_description?.length>40?'…':''}</td>
                         <td>{r.authorized_by || 'N/A'}</td>
@@ -673,7 +680,7 @@ export default function ApproverDashboard({ user, onLogout }) {
                     {historyRmas.map(r=>(
                       <tr key={r.id}>
                         <td className="td-rma">{r.rma_number}</td>
-                        <td>{r.distributor_name || r.company_name || 'N/A'}</td>
+                        <td>{r.company_name || r.distributor_name || 'N/A'}</td>
                         <td>{r.filer_name || 'N/A'}</td>
                         <td>{r.authorized_by || 'N/A'}</td>
                         <td><StatusBadge s={r.status}/></td>

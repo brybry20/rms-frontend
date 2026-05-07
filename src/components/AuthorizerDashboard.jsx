@@ -331,6 +331,8 @@ export default function AuthorizerDashboard({ user, onLogout }) {
     setFilteredRmas(f);
   }, [allRmas, searchTerm, statusFilter]);
 
+  const fetchAll = useCallback(async () => {
+    setRefreshing(true);
     try {
       const [pRes, hRes] = await Promise.all([
         api.get('/api/authorizer/pending'),

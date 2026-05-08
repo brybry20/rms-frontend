@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { BarChart, Bar, PieChart, Pie, Cell, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ComposedChart, Line } from 'recharts';
+import { BarChart, Bar, PieChart, Pie, Cell, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import jsPDF from 'jspdf';
 import * as XLSX from 'xlsx';
 import Navbar from './Navbar';
@@ -7,6 +7,8 @@ import './AuthorizerDashboard.css';
 import autoTable from 'jspdf-autotable';
 import logoSrc from '../assets/logo2.png';
 import api from '../api';
+
+
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const AUTH_BY_OPTS = ['Belle Tolentino', 'Chie Rogacion', 'Arvin Diocena', 'Mario Vargas', 'Kiko Magallanes'];
@@ -287,12 +289,16 @@ const PreviewStrip = ({ previews, onRemove }) => !previews.length ? null : (
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function AuthorizerDashboard({ user, onLogout }) {
   const [activeTab, setActiveTab] = useState('pending');
+  const [activeGroup, setActiveGroup] = useState(null);
   const [pendingRmas, setPendingRmas] = useState([]);
   const [historyRmas, setHistoryRmas] = useState([]);
   const [allRmas, setAllRmas] = useState([]);
   const [filteredRmas, setFilteredRmas] = useState([]);
   const [stats, setStats] = useState({});
   const [loading, setLoading] = useState(true);
+
+
+
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedRMA, setSelectedRMA] = useState(null);
@@ -314,22 +320,24 @@ export default function AuthorizerDashboard({ user, onLogout }) {
   const prevPendingRef = useRef([]);
 
   const [authData, setAuthData] = useState({ authorized_by: '', authorized_date: new Date().toISOString().split('T')[0], return_date: '', return_received_by: '', authorizer_comments: '' });
-  const [editData, setEditData] = useState({ authorized_by: '', return_date: '', return_received_by: '', authorizer_comments: '' });
+    const [editData, setEditData] = useState({ authorized_by: '', return_date: '', return_received_by: '', authorizer_comments: '' });
 
   useEffect(() => { document.title = 'Authorizer Dashboard'; }, []);
   
-  useEffect(() => {
-    fetchAll();
-    const iv = setInterval(fetchAll, 30000);
-    return () => clearInterval(iv);
-  }, []);
-
   useEffect(() => {
     let f = [...allRmas];
     if (searchTerm) f = f.filter(r => [r.rma_number, r.product_description, r.company_name, r.distributor_name, r.filer_name, r.end_user_location].some(v => (v || '').toLowerCase().includes(searchTerm.toLowerCase())));
     if (statusFilter !== 'all') f = f.filter(r => r.status === statusFilter);
     setFilteredRmas(f);
   }, [allRmas, searchTerm, statusFilter]);
+
+  useEffect(() => {
+    fetchAll();
+    const iv = setInterval(fetchAll, 30000);
+    return () => clearInterval(iv);
+  }, []);
+
+
 
   const fetchAll = useCallback(async () => {
     setRefreshing(true);
@@ -366,7 +374,19 @@ export default function AuthorizerDashboard({ user, onLogout }) {
         setStats(sRes.data || {});
       } catch (e) { console.warn('stats endpoint not found', e); }
 
+      // Optional routes for analytics
+      try {
+        const aRes = await api.get('/api/authorizer/all-rma');
+        setAllRmas((aRes.data.rmas || []).map(parseRMA));
+      } catch (e) { console.warn('all-rma endpoint not found', e); }
+
+      try {
+        const sRes = await api.get('/api/authorizer/stats');
+        setStats(sRes.data || {});
+      } catch (e) { console.warn('stats endpoint not found', e); }
+
       setLastFetch(Date.now());
+
     } catch (e) {
       console.error('Fetch error:', e);
     } finally {
@@ -449,37 +469,31 @@ export default function AuthorizerDashboard({ user, onLogout }) {
     catch (e) { alert(e.response?.data?.error || 'Update failed'); } finally { setUploading(false); }
   };
 
+  const StatusBadge = ({ s }) => <span className={`status-badge status-${s}`}>{getStatusTxt(s)}</span>;
+
   // ─── Chart Builder ────────────────────────────────────────────────────────────
   const buildCharts = (rmas) => {
     const monthly = Object.entries(rmas.reduce((a, r) => { const k = r.created_at?.slice(0, 7); if (k) a[k] = (a[k] || 0) + 1; return a; }, {})).sort().slice(-6).map(([month, count]) => ({ month, count }));
-    const monthlyApproval = Object.entries(rmas.reduce((a, r) => { const k = r.created_at?.slice(0, 7); if (!k) return a; if (!a[k]) a[k] = { month: k, approved: 0, rejected: 0 }; if (r.status === 'approved') a[k].approved++; if (r.status === 'rejected') a[k].rejected++; return a; }, {})).sort().slice(-6).map(([, v]) => v);
-    const avgResolution = (() => {
-      const m = {};
-      rmas.forEach(r => { const k = r.created_at?.slice(0, 7); if (!k) return; const end = r.closed_date || r.approved_date; if (!end) return; const d = (new Date(end) - new Date(r.created_at)) / 86400000; if (d < 0 || d > 365) return; if (!m[k]) m[k] = { month: k, total: 0, count: 0 }; m[k].total += d; m[k].count++; });
-      return Object.values(m).sort((a, b) => a.month.localeCompare(b.month)).slice(-6).map(({ month, total, count }) => ({ month, avgDays: count ? +(total / count).toFixed(1) : 0 }));
-    })();
     const toPie = key => Object.entries(countBy(rmas, key)).map(([name, value]) => ({ name, value }));
     const toBar = (key, n = 8) => Object.entries(countBy(rmas, key)).sort((a, b) => b[1] - a[1]).slice(0, n).map(([name, count]) => ({ name: truncStr(name, 18), count }));
-    const toBarV = (key, n = 8) => Object.entries(countBy(rmas, key)).sort((a, b) => b[1] - a[1]).slice(0, n).map(([name, value]) => ({ name: truncStr(name, 20), value }));
-    const splitLoc = (rmas, idx) => Object.entries(rmas.reduce((a, r) => { const p = (r.end_user_location || '').split(',').map(s => s.trim())[idx]; if (p) a[p] = (a[p] || 0) + 1; return a; }, {})).map(([name, count]) => ({ name: truncStr(name, 20), count })).sort((a, b) => b.count - a.count).slice(0, 10);
     return {
-      monthly, monthlyApproval, avgResolution,
-      returnType: toPie('return_type'), approvedWith: toPie('approved_with'), workEnv: toPie('work_environment'),
-      topDealers: toBar('company_name'), industry: toBar('end_user_industry'), products: toBarV('product'),
-      warranty: [{ name: 'Under Warranty', value: rmas.filter(r => r.warranty).length }, { name: 'Out of Warranty', value: rmas.filter(r => !r.warranty).length }],
-      regionData: splitLoc(rmas, 0), cityData: splitLoc(rmas, 1), barangayData: splitLoc(rmas, 2),
+      monthly,
+      returnType: toPie('return_type'),
+      topDealers: toBar('company_name'),
     };
   };
 
   const charts = buildCharts(allRmas);
 
-  const StatusBadge = ({ s }) => <span className={`status-badge status-${s}`}>{getStatusTxt(s)}</span>;
   const ChartCard = ({ title, wide, children }) => (
     <div className={`chart-card${wide ? ' chart-wide' : ''}`}>
       <div className="chart-title">{title}</div>
       {children}
     </div>
   );
+const PIE_COLORS = ['#1e3a5f','#2563eb','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899'];
+
+
 
   // ─── JSX ───────────────────────────────────────────────────────────────────
   return (
@@ -524,9 +538,32 @@ export default function AuthorizerDashboard({ user, onLogout }) {
             <button className={`tab-btn${activeTab === 'all' ? ' active' : ''}`} onClick={() => setActiveTab('all')}>All RMAs ({allRmas.length})</button>
             <button className={`tab-btn${activeTab === 'charts' ? ' active' : ''}`} onClick={() => setActiveTab('charts')}>Analytics</button>
           </div>
+        <style>{`
+          .grouped-container { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; }
+          .distributor-group { background: white; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; box-shadow: var(--shadow); }
+          .distributor-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 20px; background: #f8fafc; cursor: pointer; transition: background 0.2s; user-select: none; }
+          .distributor-header:hover { background: #f1f5f9; }
+          .distributor-info { display: flex; align-items: center; gap: 12px; }
+          .distributor-name { font-weight: 600; font-size: 14px; color: var(--accent); }
+          .distributor-count { font-size: 11px; background: #e2e8f0; padding: 2px 8px; border-radius: 10px; color: var(--text-muted); font-weight: 600; }
+          .aging-warning { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; color: #ef4444; font-weight: 700; text-transform: uppercase; margin-left: 8px; }
+          .rma-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; padding: 20px; background: #fff; border-top: 1px solid var(--border); }
+          .rma-card { border: 1px solid #f1f5f9; border-radius: 8px; padding: 16px; background: #fafafa; transition: transform 0.2s, box-shadow 0.2s; position: relative; }
+          .rma-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.05); border-color: var(--accent-light); }
+          .rma-card-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+          .rma-card-num { font-family: 'DM Mono', monospace; font-weight: 600; font-size: 13px; color: var(--accent-light); }
+          .rma-card-body { font-size: 13px; color: var(--text); }
+          .rma-card-line { margin-bottom: 6px; display: flex; justify-content: space-between; }
+          .rma-card-label { font-size: 11px; color: var(--text-muted); font-weight: 500; text-transform: uppercase; }
+          .rma-card-footer { margin-top: 14px; padding-top: 12px; border-top: 1px solid #eee; display: flex; justify-content: flex-end; gap: 8px; }
+          .chevron { transition: transform 0.3s; font-size: 12px; color: var(--text-muted); }
+          .expanded .chevron { transform: rotate(180deg); }
+        `}</style>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button className="btn-export" onClick={() => exportTableXLSX(activeTab === 'pending' ? pendingRmas : activeTab === 'all' ? allRmas : historyRmas, activeTab === 'pending' ? 'Pending_Authorization' : activeTab === 'all' ? 'All_RMAs' : 'Authorization_History')}>📎 Excel</button>
-            <button className="btn-export btn-pdf" onClick={() => exportTablePDF(activeTab === 'pending' ? pendingRmas : activeTab === 'all' ? allRmas : historyRmas, activeTab === 'pending' ? 'Pending Authorization' : activeTab === 'all' ? 'All RMAs' : 'Authorization History')}>📄 PDF</button>
+            <button className="btn-export" onClick={() => exportTableXLSX(activeTab === 'pending' ? pendingRmas : historyRmas, activeTab === 'pending' ? 'Pending_Authorization' : 'Authorization_History')}>📎 Excel</button>
+
+            <button className="btn-export btn-pdf" onClick={() => exportTablePDF(activeTab === 'pending' ? pendingRmas : historyRmas, activeTab === 'pending' ? 'Pending Authorization' : 'Authorization History')}>📄 PDF</button>
+
           </div>
         </div>
 
@@ -558,13 +595,15 @@ export default function AuthorizerDashboard({ user, onLogout }) {
             <div className="panel-header"><span className="panel-title">Authorization History</span></div>
             {loading ? <div className="loading-state">Loading…</div> : historyRmas.length === 0 ? <div className="empty-state">No authorized RMAs yet.</div> : (
               <div className="table-wrap"><table className="data-table">
-                <thead><tr><th>RMA Number</th><th>Dealer</th><th>Authorized By</th><th>Return Date</th><th>Actions</th></tr></thead>
-                <tbody>{historyRmas.map(r => (
-                  <tr key={r.id}>
-                    <td className="td-rma">{r.rma_number}</td>
-                    <td>{r.company_name || r.distributor_name || 'N/A'}</td>
-                    <td>{r.authorized_by || 'N/A'}</td>
-                    <td>{fmtDate(r.return_date)}</td>
+            <thead><tr><th>RMA Number</th><th>Dealer</th><th>Authorized By</th><th>Status</th><th>Return Date</th><th>Actions</th></tr></thead>
+            <tbody>{historyRmas.map(r => (
+              <tr key={r.id}>
+                <td className="td-rma">{r.rma_number}</td>
+                <td>{r.company_name || r.distributor_name || 'N/A'}</td>
+                <td>{r.authorized_by || 'N/A'}</td>
+                <td><StatusBadge s={r.status}/></td>
+                <td>{fmtDate(r.return_date)}</td>
+
                     <td><div className="action-btns">
                       <button className="btn-action btn-view" onClick={() => { setSelectedRMA({ ...r, attachments: parseAtts(r.attachments), authorizer_attachments: parseAtts(r.authorizer_attachments) }); setViewMode('view'); setEditMode(false); }}>Review</button>
                       <button className="btn-action btn-edit" onClick={() => { setSelectedRMA({ ...r, attachments: parseAtts(r.attachments), authorizer_attachments: parseAtts(r.authorizer_attachments) }); setEditData({ authorized_by: r.authorized_by || '', return_date: r.return_date || '', return_received_by: r.return_received_by || '', authorizer_comments: r.authorizer_comments || '' }); setEditAtts([]); setEditPrev([]); setEditMode(true); }}>Edit</button>
@@ -578,54 +617,85 @@ export default function AuthorizerDashboard({ user, onLogout }) {
         )}
 
         {activeTab === 'all' && (
-          <div className="panel">
-            <div className="panel-header">
-              <span className="panel-title">All RMA Requests</span>
+          <div className="panel" style={{ background: 'transparent', border: 'none', boxShadow: 'none' }}>
+            <div className="panel-header" style={{ background: 'white', borderRadius: '10px', marginBottom: '16px', border: '1px solid var(--border)' }}>
+              <span className="panel-title">System-wide RMAs (Grouped by Distributor)</span>
               <div className="panel-actions">
-                <div className="search-wrap">
-                  <input className="search-input" style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 6, padding: '6px 12px', fontSize: 13 }} placeholder="Search RMA, filer, product…" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-                </div>
+                <input className="search-input" style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 6, padding: '6px 12px', fontSize: 13 }} placeholder="Search everything…" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                 <select className="filter-select" style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 6, padding: '6px 8px', fontSize: 13 }} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
                   {STATUS_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </div>
             </div>
-            {loading ? <div className="loading-state">Loading data…</div> : filteredRmas.length === 0 ? <div className="empty-state">No RMA requests found.</div> : (
-              <div className="table-wrap">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>RMA Number</th>
-                      <th>Filer Name</th>
-                      <th>Distributor</th>
-                      <th>Product</th>
-                      <th>Status</th>
-                      <th>Date Created</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredRmas.map(r => (
-                      <tr key={r.id}>
-                        <td className="td-rma">{r.rma_number}</td>
-                        <td>{r.filer_name || 'N/A'}</td>
-                        <td>{r.company_name || r.distributor_name || 'N/A'}</td>
-                        <td className="td-truncate">{truncStr(r.product_description || '', 40)}</td>
-                        <td><StatusBadge s={r.status} /></td>
-                        <td>{fmtDate(r.created_at)}</td>
-                        <td>
-                          <div className="action-btns">
-                            <button className="btn-action btn-view" onClick={() => { setSelectedRMA(r); setViewMode('view'); }}>View</button>
-                            <button className="btn-action btn-edit" onClick={() => handleEditRMAAdmin(r)}>Edit</button>
-                            <button className="btn-action btn-delete" onClick={() => handleDeleteRMA(r.id)} disabled={deletingId === r.id}>{deletingId === r.id ? '…' : 'Delete'}</button>
+
+            {loading ? <div className="loading-state">Syncing data…</div> : filteredRmas.length === 0 ? <div className="empty-state">No matching records.</div> : (() => {
+              const groups = filteredRmas.reduce((acc, r) => {
+                const key = r.company_name || r.distributor_name || 'Others';
+                if (!acc[key]) acc[key] = [];
+                acc[key].push(r);
+                return acc;
+              }, {});
+
+              return (
+                <div className="grouped-container">
+                  {Object.entries(groups).map(([name, items]) => {
+                    const isExpanded = activeGroup === name;
+                    const hasOverdue = items.some(r => r.status === 'pending_authorizer' && (Date.now() - new Date(r.updated_at).getTime() > 3 * 24 * 60 * 60 * 1000));
+
+                    return (
+                      <div key={name} className={`distributor-group ${isExpanded ? 'expanded' : ''}`}>
+                        <div className="distributor-header" onClick={() => setActiveGroup(isExpanded ? null : name)}>
+                          <div className="distributor-info">
+                            <span className="distributor-name">{name}</span>
+                            <span className="distributor-count">{items.length} items</span>
+                            {hasOverdue && <span className="aging-warning">⚠️ Needs Attention</span>}
                           </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                          <span className="chevron">▼</span>
+                        </div>
+                        {isExpanded && (
+                          <div className="rma-grid">
+                            {items.map(r => {
+                              const isOverdue = r.status === 'pending_authorizer' && (Date.now() - new Date(r.updated_at).getTime() > 3 * 24 * 60 * 60 * 1000);
+                              return (
+                                <div key={r.id} className="rma-card">
+                                  <div className="rma-card-head">
+                                    <span className="rma-card-num">{r.rma_number}</span>
+                                    <StatusBadge s={r.status} />
+                                  </div>
+                                  <div className="rma-card-body">
+                                    <div className="rma-card-line">
+                                      <span className="rma-card-label">Product</span>
+                                      <span style={{ fontWeight: 500 }}>{truncStr(r.product || 'N/A', 25)}</span>
+                                    </div>
+                                    <div className="rma-card-line">
+                                      <span className="rma-card-label">Filer</span>
+                                      <span>{r.filer_name || 'N/A'}</span>
+                                    </div>
+                                    <div className="rma-card-line">
+                                      <span className="rma-card-label">Filed On</span>
+                                      <span>{fmtDate(r.created_at)}</span>
+                                    </div>
+                                    {isOverdue && (
+                                      <div style={{ marginTop: 8, fontSize: 10, color: '#ef4444', fontWeight: 700 }}>
+                                        🕒 STAGNANT FOR {Math.floor((Date.now() - new Date(r.updated_at).getTime()) / (24 * 60 * 60 * 1000))} DAYS
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="rma-card-footer">
+                                    <button className="btn-action btn-view" onClick={() => { setSelectedRMA(r); setViewMode('view'); }}>View</button>
+                                    <button className="btn-action btn-edit" onClick={() => { setSelectedRMA(r); setEditDataAdmin(r); setViewMode('edit_admin'); }}>Edit</button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
         )}
 
@@ -657,14 +727,6 @@ export default function AuthorizerDashboard({ user, onLogout }) {
                   <Bar dataKey="count">
                     {Object.entries(stats.status_counts || {}).map(([k], i) => <Cell key={i} fill={STATUS_COLORS[k] || '#cbd5e1'} />)}
                   </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </ChartCard>
-            <ChartCard title="Top Distributors">
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={charts.topDealers} layout="vertical" margin={{ left: 30 }}>
-                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f0f0f0" /><XAxis type="number" hide /><YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={80} /><Tooltip {...TT} />
-                  <Bar dataKey="count" fill="#2563eb" radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </ChartCard>

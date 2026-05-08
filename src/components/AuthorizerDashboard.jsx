@@ -286,6 +286,78 @@ const PreviewStrip = ({ previews, onRemove }) => !previews.length ? null : (
   </div>
 );
 
+// ─── Sub-components ───────────────────────────────────────────────────────────
+const StatusBadge = ({ s }) => <span className={`status-badge status-${s}`}>{getStatusTxt(s)}</span>;
+
+const GroupedRMAList = ({ rmas, activeGroup, setActiveGroup, renderActions, checkOverdue }) => {
+  if (!rmas || rmas.length === 0) return <div className="empty-state">No matching records.</div>;
+  const groups = rmas.reduce((acc, r) => {
+    const key = r.company_name || r.distributor_name || 'Others';
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(r);
+    return acc;
+  }, {});
+
+  return (
+    <div className="grouped-container">
+      {Object.entries(groups).map(([name, items]) => {
+        const isExpanded = activeGroup === name;
+        const hasOverdue = checkOverdue && items.some(checkOverdue);
+
+        return (
+          <div key={name} className={`distributor-group ${isExpanded ? 'expanded' : ''}`}>
+            <div className="distributor-header" onClick={() => setActiveGroup(isExpanded ? null : name)}>
+              <div className="distributor-info">
+                <span className="distributor-name">{name}</span>
+                <span className="distributor-count">{items.length} items</span>
+                {hasOverdue && <span className="aging-warning">⚠️ Needs Attention</span>}
+              </div>
+              <span className="chevron">▼</span>
+            </div>
+            {isExpanded && (
+              <div className="rma-grid">
+                {items.map(r => {
+                  const isOverdue = checkOverdue && checkOverdue(r);
+                  return (
+                    <div key={r.id} className="rma-card">
+                      <div className="rma-card-head">
+                        <span className="rma-card-num">{r.rma_number}</span>
+                        <StatusBadge s={r.status} />
+                      </div>
+                      <div className="rma-card-body">
+                        <div className="rma-card-line">
+                          <span className="rma-card-label">Product</span>
+                          <span style={{ fontWeight: 500 }}>{truncStr(r.product || 'N/A', 25)}</span>
+                        </div>
+                        <div className="rma-card-line">
+                          <span className="rma-card-label">Filer</span>
+                          <span>{r.filer_name || 'N/A'}</span>
+                        </div>
+                        <div className="rma-card-line">
+                          <span className="rma-card-label">Filed On</span>
+                          <span>{fmtDate(r.created_at)}</span>
+                        </div>
+                        {isOverdue && (
+                          <div style={{ marginTop: 8, fontSize: 10, color: '#ef4444', fontWeight: 700 }}>
+                            🕒 STAGNANT FOR {Math.floor((Date.now() - new Date(r.updated_at).getTime()) / (24 * 60 * 60 * 1000))} DAYS
+                          </div>
+                        )}
+                      </div>
+                      <div className="rma-card-footer">
+                        {renderActions(r)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function AuthorizerDashboard({ user, onLogout }) {
   const [activeTab, setActiveTab] = useState('pending');
@@ -458,7 +530,7 @@ export default function AuthorizerDashboard({ user, onLogout }) {
     catch (e) { alert(e.response?.data?.error || 'Update failed'); } finally { setUploading(false); }
   };
 
-  const StatusBadge = ({ s }) => <span className={`status-badge status-${s}`}>{getStatusTxt(s)}</span>;
+
 
   // ─── Chart Builder ────────────────────────────────────────────────────────────
   const buildCharts = (rmas) => {
@@ -556,51 +628,43 @@ export default function AuthorizerDashboard({ user, onLogout }) {
           </div>
         </div>
 
+        {/* PENDING TABLE */}
         {activeTab === 'pending' && (
           <div className="panel">
             <div className="panel-header"><span className="panel-title">Pending RMA Requests</span></div>
-            {loading ? <div className="loading-state">Loading…</div> : pendingRmas.length === 0 ? <div className="empty-state">No pending RMA requests.</div> : (
-              <div className="table-wrap"><table className="data-table">
-                <thead><tr><th>RMA Number</th><th>Dealer</th><th>Product</th><th>Date</th><th>Actions</th></tr></thead>
-                <tbody>{pendingRmas.map(r => (
-                  <tr key={r.id}>
-                    <td className="td-rma">{r.rma_number}</td>
-                    <td>{r.company_name || r.distributor_name || 'N/A'}</td>
-                    <td className="td-truncate">{(r.product_description || '').substring(0, 40)}{r.product_description?.length > 40 ? '…' : ''}</td>
-                    <td>{fmtDate(r.created_at)}</td>
-                    <td><div className="action-btns">
-                      <button className="btn-action btn-view" onClick={() => { setSelectedRMA({ ...r, attachments: parseAtts(r.attachments), authorizer_attachments: parseAtts(r.authorizer_attachments) }); setViewMode('view'); }}>Review</button>
-                      <button className="btn-action btn-approve" onClick={() => { setSelectedRMA({ ...r, attachments: parseAtts(r.attachments) }); setViewMode('approve'); setAuthAtts([]); setAuthPrev([]); setAuthData({ authorized_by: '', authorized_date: new Date().toISOString().split('T')[0], return_date: '', return_received_by: '', authorizer_comments: '' }); }}>Authorize</button>
-                    </div></td>
-                  </tr>
-                ))}</tbody>
-              </table></div>
+            {loading ? <div className="loading-state">Loading…</div> : (
+              <GroupedRMAList
+                rmas={pendingRmas}
+                activeGroup={activeGroup}
+                setActiveGroup={setActiveGroup}
+                checkOverdue={r => r.status === 'pending_authorizer' && (Date.now() - new Date(r.updated_at).getTime() > 3 * 24 * 60 * 60 * 1000)}
+                renderActions={r => (
+                  <>
+                    <button className="btn-action btn-view" onClick={() => { setSelectedRMA({ ...r, attachments: parseAtts(r.attachments), authorizer_attachments: parseAtts(r.authorizer_attachments) }); setViewMode('view'); }}>Review</button>
+                    <button className="btn-action btn-approve" onClick={() => { setSelectedRMA({ ...r, attachments: parseAtts(r.attachments) }); setViewMode('approve'); setAuthAtts([]); setAuthPrev([]); setAuthData({ authorized_by: '', authorized_date: new Date().toISOString().split('T')[0], return_date: '', return_received_by: '', authorizer_comments: '' }); }}>Authorize</button>
+                  </>
+                )}
+              />
             )}
           </div>
         )}
 
+        {/* HISTORY TABLE */}
         {activeTab === 'history' && (
           <div className="panel">
             <div className="panel-header"><span className="panel-title">Authorization History</span></div>
-            {loading ? <div className="loading-state">Loading…</div> : historyRmas.length === 0 ? <div className="empty-state">No authorized RMAs yet.</div> : (
-              <div className="table-wrap"><table className="data-table">
-            <thead><tr><th>RMA Number</th><th>Dealer</th><th>Authorized By</th><th>Status</th><th>Return Date</th><th>Actions</th></tr></thead>
-            <tbody>{historyRmas.map(r => (
-              <tr key={r.id}>
-                <td className="td-rma">{r.rma_number}</td>
-                <td>{r.company_name || r.distributor_name || 'N/A'}</td>
-                <td>{r.authorized_by || 'N/A'}</td>
-                <td><StatusBadge s={r.status}/></td>
-                <td>{fmtDate(r.return_date)}</td>
-
-                    <td><div className="action-btns">
-                      <button className="btn-action btn-view" onClick={() => { setSelectedRMA({ ...r, attachments: parseAtts(r.attachments), authorizer_attachments: parseAtts(r.authorizer_attachments) }); setViewMode('view'); setEditMode(false); }}>Review</button>
-                      <button className="btn-action btn-edit" onClick={() => { setSelectedRMA({ ...r, attachments: parseAtts(r.attachments), authorizer_attachments: parseAtts(r.authorizer_attachments) }); setEditData({ authorized_by: r.authorized_by || '', return_date: r.return_date || '', return_received_by: r.return_received_by || '', authorizer_comments: r.authorizer_comments || '' }); setEditAtts([]); setEditPrev([]); setEditMode(true); }}>Edit</button>
-                    </div></td>
-                  </tr>
-                ))}</tbody>
-              </table>
-              </div>
+            {loading ? <div className="loading-state">Loading…</div> : (
+              <GroupedRMAList
+                rmas={historyRmas}
+                activeGroup={activeGroup}
+                setActiveGroup={setActiveGroup}
+                renderActions={r => (
+                  <>
+                    <button className="btn-action btn-view" onClick={() => { setSelectedRMA({ ...r, attachments: parseAtts(r.attachments), authorizer_attachments: parseAtts(r.authorizer_attachments) }); setViewMode('view'); setEditMode(false); }}>Review</button>
+                    <button className="btn-action btn-edit" onClick={() => { setSelectedRMA({ ...r, attachments: parseAtts(r.attachments), authorizer_attachments: parseAtts(r.authorizer_attachments) }); setEditData({ authorized_by: r.authorized_by || '', return_date: r.return_date || '', return_received_by: r.return_received_by || '', authorizer_comments: r.authorizer_comments || '' }); setEditAtts([]); setEditPrev([]); setEditMode(true); }}>Edit</button>
+                  </>
+                )}
+              />
             )}
           </div>
         )}
@@ -617,74 +681,20 @@ export default function AuthorizerDashboard({ user, onLogout }) {
               </div>
             </div>
 
-            {loading ? <div className="loading-state">Syncing data…</div> : filteredRmas.length === 0 ? <div className="empty-state">No matching records.</div> : (() => {
-              const groups = filteredRmas.reduce((acc, r) => {
-                const key = r.company_name || r.distributor_name || 'Others';
-                if (!acc[key]) acc[key] = [];
-                acc[key].push(r);
-                return acc;
-              }, {});
-
-              return (
-                <div className="grouped-container">
-                  {Object.entries(groups).map(([name, items]) => {
-                    const isExpanded = activeGroup === name;
-                    const hasOverdue = items.some(r => r.status === 'pending_authorizer' && (Date.now() - new Date(r.updated_at).getTime() > 3 * 24 * 60 * 60 * 1000));
-
-                    return (
-                      <div key={name} className={`distributor-group ${isExpanded ? 'expanded' : ''}`}>
-                        <div className="distributor-header" onClick={() => setActiveGroup(isExpanded ? null : name)}>
-                          <div className="distributor-info">
-                            <span className="distributor-name">{name}</span>
-                            <span className="distributor-count">{items.length} items</span>
-                            {hasOverdue && <span className="aging-warning">⚠️ Needs Attention</span>}
-                          </div>
-                          <span className="chevron">▼</span>
-                        </div>
-                        {isExpanded && (
-                          <div className="rma-grid">
-                            {items.map(r => {
-                              const isOverdue = r.status === 'pending_authorizer' && (Date.now() - new Date(r.updated_at).getTime() > 3 * 24 * 60 * 60 * 1000);
-                              return (
-                                <div key={r.id} className="rma-card">
-                                  <div className="rma-card-head">
-                                    <span className="rma-card-num">{r.rma_number}</span>
-                                    <StatusBadge s={r.status} />
-                                  </div>
-                                  <div className="rma-card-body">
-                                    <div className="rma-card-line">
-                                      <span className="rma-card-label">Product</span>
-                                      <span style={{ fontWeight: 500 }}>{truncStr(r.product || 'N/A', 25)}</span>
-                                    </div>
-                                    <div className="rma-card-line">
-                                      <span className="rma-card-label">Filer</span>
-                                      <span>{r.filer_name || 'N/A'}</span>
-                                    </div>
-                                    <div className="rma-card-line">
-                                      <span className="rma-card-label">Filed On</span>
-                                      <span>{fmtDate(r.created_at)}</span>
-                                    </div>
-                                    {isOverdue && (
-                                      <div style={{ marginTop: 8, fontSize: 10, color: '#ef4444', fontWeight: 700 }}>
-                                        🕒 STAGNANT FOR {Math.floor((Date.now() - new Date(r.updated_at).getTime()) / (24 * 60 * 60 * 1000))} DAYS
-                                      </div>
-                                    )}
-                                  </div>
-                                  <div className="rma-card-footer">
-                                    <button className="btn-action btn-view" onClick={() => { setSelectedRMA(r); setViewMode('view'); }}>View</button>
-                                    <button className="btn-action btn-edit" onClick={() => { setSelectedRMA(r); setEditDataAdmin(r); setViewMode('edit_admin'); }}>Edit</button>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })()}
+            {loading ? <div className="loading-state">Syncing data…</div> : (
+              <GroupedRMAList
+                rmas={filteredRmas}
+                activeGroup={activeGroup}
+                setActiveGroup={setActiveGroup}
+                checkOverdue={r => r.status === 'pending_authorizer' && (Date.now() - new Date(r.updated_at).getTime() > 3 * 24 * 60 * 60 * 1000)}
+                renderActions={r => (
+                  <>
+                    <button className="btn-action btn-view" onClick={() => { setSelectedRMA(r); setViewMode('view'); }}>View</button>
+                    <button className="btn-action btn-edit" onClick={() => { setSelectedRMA(r); setEditDataAdmin(r); setViewMode('edit_admin'); }}>Edit</button>
+                  </>
+                )}
+              />
+            )}
           </div>
         )}
 

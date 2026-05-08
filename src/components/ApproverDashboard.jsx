@@ -723,6 +723,28 @@ export default function ApproverDashboard({ user, onLogout }) {
           </div>
         </div>
 
+        <style>{`
+          .grouped-container { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; }
+          .distributor-group { background: white; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; box-shadow: var(--shadow); }
+          .distributor-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 20px; background: #f8fafc; cursor: pointer; transition: background 0.2s; user-select: none; }
+          .distributor-header:hover { background: #f1f5f9; }
+          .distributor-info { display: flex; align-items: center; gap: 12px; }
+          .distributor-name { font-weight: 600; font-size: 14px; color: var(--accent); }
+          .distributor-count { font-size: 11px; background: #e2e8f0; padding: 2px 8px; border-radius: 10px; color: var(--text-muted); font-weight: 600; }
+          .aging-warning { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; color: #ef4444; font-weight: 700; text-transform: uppercase; margin-left: 8px; }
+          .rma-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; padding: 20px; background: #fff; border-top: 1px solid var(--border); }
+          .rma-card { border: 1px solid #f1f5f9; border-radius: 8px; padding: 16px; background: #fafafa; transition: transform 0.2s, box-shadow 0.2s; position: relative; }
+          .rma-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.05); border-color: var(--accent-light); }
+          .rma-card-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+          .rma-card-num { font-family: 'DM Mono', monospace; font-weight: 600; font-size: 13px; color: var(--accent-light); }
+          .rma-card-body { font-size: 13px; color: var(--text); }
+          .rma-card-line { margin-bottom: 6px; display: flex; justify-content: space-between; }
+          .rma-card-label { font-size: 11px; color: var(--text-muted); font-weight: 500; text-transform: uppercase; }
+          .rma-card-footer { margin-top: 14px; padding-top: 12px; border-top: 1px solid #eee; display: flex; justify-content: flex-end; gap: 8px; }
+          .chevron { transition: transform 0.3s; font-size: 12px; color: var(--text-muted); }
+          .expanded .chevron { transform: rotate(180deg); }
+        `}</style>
+
         {/* PENDING TABLE */}
         {activeTab === 'pending' && (
           <div className="panel">

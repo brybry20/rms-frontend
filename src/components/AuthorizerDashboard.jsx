@@ -289,10 +289,23 @@ const PreviewStrip = ({ previews, onRemove }) => !previews.length ? null : (
 // ─── Sub-components ───────────────────────────────────────────────────────────
 const StatusBadge = ({ s }) => <span className={`status-badge status-${s}`}>{getStatusTxt(s)}</span>;
 
-const GroupedRMAList = ({ rmas, activeGroup, setActiveGroup, renderActions, checkOverdue }) => {
+const GroupedRMAList = ({ rmas, activeGroup, setActiveGroup, renderActions, checkOverdue, groupBy }) => {
   if (!rmas || rmas.length === 0) return <div className="empty-state">No matching records.</div>;
+  
+  const getGroupKey = (r) => {
+    if (groupBy === 'date') {
+      if (!r.created_at) return 'Unknown Date';
+      const d = new Date(r.created_at);
+      return isNaN(d) ? r.created_at : `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    }
+    if (groupBy === 'filer') return r.filer_name || 'Unknown Filer';
+    if (groupBy === 'status') return getStatusTxt(r.status);
+    if (groupBy === 'product') return r.product || 'Unknown Product';
+    return r.company_name || r.distributor_name || 'Others';
+  };
+
   const groups = rmas.reduce((acc, r) => {
-    const key = r.company_name || r.distributor_name || 'Others';
+    const key = getGroupKey(r);
     if (!acc[key]) acc[key] = [];
     acc[key].push(r);
     return acc;
@@ -362,6 +375,7 @@ const GroupedRMAList = ({ rmas, activeGroup, setActiveGroup, renderActions, chec
 export default function AuthorizerDashboard({ user, onLogout }) {
   const [activeTab, setActiveTab] = useState('pending');
   const [activeGroup, setActiveGroup] = useState(null);
+  const [groupBy, setGroupBy] = useState('distributor');
   const [pendingRmas, setPendingRmas] = useState([]);
   const [historyRmas, setHistoryRmas] = useState([]);
   const [allRmas, setAllRmas] = useState([]);
@@ -620,7 +634,22 @@ export default function AuthorizerDashboard({ user, onLogout }) {
           .chevron { transition: transform 0.3s; font-size: 12px; color: var(--text-muted); }
           .expanded .chevron { transform: rotate(180deg); }
         `}</style>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginRight: '8px' }}>
+              <span style={{ fontSize: '13px', color: '#64748b', fontWeight: 500 }}>Group by:</span>
+              <select 
+                className="filter-select" 
+                style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, padding: '4px 8px', fontSize: 13 }}
+                value={groupBy}
+                onChange={e => { setActiveGroup(null); setGroupBy(e.target.value); }}
+              >
+                <option value="distributor">Distributor</option>
+                <option value="date">Date Filed</option>
+                <option value="filer">Filer Name</option>
+                <option value="status">Status</option>
+                <option value="product">Product</option>
+              </select>
+            </div>
             <button className="btn-export" onClick={() => exportTableXLSX(activeTab === 'pending' ? pendingRmas : historyRmas, activeTab === 'pending' ? 'Pending_Authorization' : 'Authorization_History')}>📎 Excel</button>
 
             <button className="btn-export btn-pdf" onClick={() => exportTablePDF(activeTab === 'pending' ? pendingRmas : historyRmas, activeTab === 'pending' ? 'Pending Authorization' : 'Authorization History')}>📄 PDF</button>
@@ -637,6 +666,7 @@ export default function AuthorizerDashboard({ user, onLogout }) {
                 rmas={pendingRmas}
                 activeGroup={activeGroup}
                 setActiveGroup={setActiveGroup}
+                groupBy={groupBy}
                 checkOverdue={r => r.status === 'pending_authorizer' && (Date.now() - new Date(r.updated_at).getTime() > 3 * 24 * 60 * 60 * 1000)}
                 renderActions={r => (
                   <>
@@ -658,6 +688,7 @@ export default function AuthorizerDashboard({ user, onLogout }) {
                 rmas={historyRmas}
                 activeGroup={activeGroup}
                 setActiveGroup={setActiveGroup}
+                groupBy={groupBy}
                 renderActions={r => (
                   <>
                     <button className="btn-action btn-view" onClick={() => { setSelectedRMA({ ...r, attachments: parseAtts(r.attachments), authorizer_attachments: parseAtts(r.authorizer_attachments) }); setViewMode('view'); setEditMode(false); }}>Review</button>
@@ -672,7 +703,7 @@ export default function AuthorizerDashboard({ user, onLogout }) {
         {activeTab === 'all' && (
           <div className="panel" style={{ background: 'transparent', border: 'none', boxShadow: 'none' }}>
             <div className="panel-header" style={{ background: 'white', borderRadius: '10px', marginBottom: '16px', border: '1px solid var(--border)' }}>
-              <span className="panel-title">System-wide RMAs (Grouped by Distributor)</span>
+              <span className="panel-title">System-wide RMAs (Grouped by {groupBy.charAt(0).toUpperCase() + groupBy.slice(1)})</span>
               <div className="panel-actions">
                 <input className="search-input" style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 6, padding: '6px 12px', fontSize: 13 }} placeholder="Search everything…" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                 <select className="filter-select" style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 6, padding: '6px 8px', fontSize: 13 }} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
@@ -686,6 +717,7 @@ export default function AuthorizerDashboard({ user, onLogout }) {
                 rmas={filteredRmas}
                 activeGroup={activeGroup}
                 setActiveGroup={setActiveGroup}
+                groupBy={groupBy}
                 checkOverdue={r => r.status === 'pending_authorizer' && (Date.now() - new Date(r.updated_at).getTime() > 3 * 24 * 60 * 60 * 1000)}
                 renderActions={r => (
                   <>

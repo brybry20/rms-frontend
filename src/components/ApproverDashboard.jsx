@@ -424,19 +424,18 @@ export default function ApproverDashboard({ user, onLogout }) {
       setHistoryRmas(history);
       prevRmasRef.current = pending;
 
-      // Optional routes for analytics
-      try {
-        const aRes = await api.get('/api/approver/all-rma');
-        setAllRmas((aRes.data.rmas || []).map(parseRMA));
-      } catch (e) { console.warn('all-rma endpoint not found', e); }
+      // Build allRmas by merging pending + history (deduplicated by id)
+      const merged = [...pending, ...history];
+      const seen = new Set();
+      const deduped = merged.filter(r => { if (seen.has(r.id)) return false; seen.add(r.id); return true; });
+      const all = deduped.map(parseRMA);
+      setAllRmas(all);
 
-      try {
-        const sRes = await api.get('/api/approver/stats');
-        setStats(sRes.data || {});
-      } catch (e) { console.warn('stats endpoint not found', e); }
+      // Derive stats client-side from merged data
+      const statusCounts = all.reduce((acc, r) => { acc[r.status] = (acc[r.status] || 0) + 1; return acc; }, {});
+      setStats({ status_counts: statusCounts });
 
       setLastFetch(Date.now());
-
 
     } catch(e) {
       console.error('Fetch error:', e);
@@ -568,7 +567,7 @@ export default function ApproverDashboard({ user, onLogout }) {
       {children}
     </div>
   );
-const PIE_COLORS = ['#1e3a5f','#2563eb','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899'];
+// PIE_COLORS already defined at top of file
 
 
   return (
